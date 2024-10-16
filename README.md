@@ -105,7 +105,7 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 
 1. 安装
 ```shell
-curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/deep-facker.js > plugins/example/deep-faker.js
+curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/zhiyu1998/rconsole-plugin-complementary-set/main/deep-faker.js > plugins/example/deep-faker.js
 ```
 
 2. 安装依赖
