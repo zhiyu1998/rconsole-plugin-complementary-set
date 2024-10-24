@@ -9,6 +9,7 @@
 - ✅ 链接截图
 - ✅ 使用http解决ncqq点赞插件
 - ✅ 一些语音包
+- ✅ GPT-SoVITS 接口适配
 
 ## kimi.js 使用指南
 
@@ -116,3 +117,30 @@ pnpm add form-data axios -w
 3. 开始游玩
 
 ![img.png](img/img6.webp)
+
+## GPT-SoVITS 接口适配
+
+适配 [GPT-SoVITS-WebUI](https://github.com/RVC-Boss/GPT-SoVITS) 语音的小型插件
+
+- 搭建 [GPT-SoVITS-WebUI](https://github.com/RVC-Boss/GPT-SoVITS)
+- 搭建 [GPT-SoVITS 的api调用接口](https://github.com/jianchang512/gptsovits-api)
+
+克隆到 `example`
+```shell
+curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/zhiyu1998/rconsole-plugin-complementary-set/main/gpt-sovits.js > plugins/example/gpt-sovits.js
+```
+
+1. 修改地址
+```shell
+const GPTSOVITS_HOST = "http://localhost:9880"
+```
+
+2. 修改人物，比如`丁真`
+```shell
+const voiceList = Object.freeze([
+    "丁真",
+])
+```
+
+3. 开始游玩
+   ![img.png](img/img7.webp)
