@@ -1,7 +1,10 @@
 import puppeteer from "../../lib/puppeteer/puppeteer.js";
 import fs from "fs";
 
-export class example3 extends plugin {
+// 截图前等待的时间
+const screenWaitTime = 3;
+
+export class Screenshot extends plugin {
     constructor() {
         super({
             name: "http截图",
@@ -26,6 +29,10 @@ export class example3 extends plugin {
                 },
             ],
         });
+    }
+
+    async delay(timeout) {
+        return new Promise(resolve => setTimeout(resolve, timeout));
     }
 
     async screenshot() {
@@ -67,8 +74,10 @@ export class example3 extends plugin {
         logger.info(`开始截图...${link}`);
         // 设置截图的大小和视口尺寸
         await page.setViewport({ width: 1920, height: 1080 });
+        // 显式等待几秒
+        await this.delay(screenWaitTime * 1000);
         // 截图并保存到文件
-        const buff = await page.screenshot({
+        await page.screenshot({
             path: "./screenshot.png",
             type: "jpeg",
             fullPage: fullPage,
