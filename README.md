@@ -10,6 +10,7 @@
 - ✅ 使用http解决ncqq点赞插件
 - ✅ 一些语音包
 - ✅ GPT-SoVITS 接口适配
+- ✅ NCQQ 3.4.6 以上快捷语音包
 
 ## kimi.js 使用指南
 
@@ -143,4 +144,15 @@ const voiceList = Object.freeze([
 ```
 
 3. 开始游玩
-   ![img.png](img/img7.webp)
+![img.png](img/img7.webp)
+
+## NCQQ 3.4.6 以上快捷语音包
+
+> ⚠️ 必须是 NCQQ 3.4.6 及以上才可以使用
+
+克隆到 `example`
+```shell
+curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/zhiyu1998/rconsole-plugin-complementary-set/main/ncqq-ai-voice.js > plugins/example/ncqq-ai-voice.js
+```
+
+![img.png](img/img8.webp)
