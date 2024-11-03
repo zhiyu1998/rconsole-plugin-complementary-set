@@ -74,7 +74,7 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 
 ![img.png](img/img2.webp)
 
-## 谁艾特我(根据 @花海里的秋刀鱼 进行了排序修改)
+## 谁艾特我
 
 群里有时候要处理群友提出的 bug 就会找At 之前这个脚本没有进行排序, 要拉到最底下, 现在做了排序第一个就是最新的
 
