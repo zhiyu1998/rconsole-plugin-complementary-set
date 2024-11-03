@@ -18,14 +18,12 @@ export class Screenshot extends plugin {
                     reg: "^http",
                     /** 执行方法 */
                     fnc: "screenshot",
-                    permission: "master",
                 },
                 {
                     /** 命令正则匹配 */
                     reg: "^#gittr$",
                     /** 执行方法 */
                     fnc: "githubTrending",
-                    permission: "master",
                 },
             ],
         });
@@ -35,14 +33,20 @@ export class Screenshot extends plugin {
         return new Promise(resolve => setTimeout(resolve, timeout));
     }
 
-    async screenshot() {
+    async screenshot(e) {
+        if (!e.isMaster) {
+            logger.info("[截图] 检测到当前不是主人，忽略");
+            return;
+        }
         await this.sendScreenShot(this.e.msg.trim());
-        return;
     }
 
-    async githubTrending() {
+    async githubTrending(e) {
+        if (!e.isMaster) {
+            logger.info("[截图] 检测到当前不是主人，忽略");
+            return;
+        }
         await this.sendNormalScreenShot("https://github.com/trending", true);
-        return;
     }
 
     async sendNormalScreenShot(link) {
