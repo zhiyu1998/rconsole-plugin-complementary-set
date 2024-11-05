@@ -11,6 +11,7 @@
 - ✅ 一些语音包
 - ✅ GPT-SoVITS 接口适配
 - ✅ NCQQ 3.4.6 以上快捷语音包
+- ✅ 小秘书，反击at小助手
 
 ## kimi.js 使用指南
 
@@ -156,3 +157,28 @@ curl -fsSL https://ghproxy.net/https://raw.githubusercontent.com/zhiyu1998/rcons
 ```
 
 ![img.png](img/img8.webp)
+
+## 小秘书
+
+1. 安装
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/secretary.js > plugins/rconsole-plugin/apps/secretary.js
+```
+
+2. 在文件更改QQ号
+
+```javascript
+// TODO 这里需要修改你的QQ号
+const masterId = "";
+```
+
+3. 开始使用
+
+```shell
+1. 小秘书切换状态
+2. 小秘书TODO
+3. 小秘书cls
+```
+
+切换到忙碌就会帮你反击at（前提你的机器人是管理员），然后做成todo统一处理
