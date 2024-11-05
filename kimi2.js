@@ -12,7 +12,83 @@ async function markdownRender(e, query, aiContent) {
         aiContent = aiContent.split("搜索结果来自：")[0];
     }
 
-    const htmlContent = `<!DOCTYPE html>
+    const htmlContent = renderHTML(query, aiContent);
+
+    await page.setViewport({
+        width: 1280,
+        height: 720,
+        deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
+    });
+    // 设置页面内容为包含 Base64 图片的 HTML
+    await page.setContent(htmlContent, {
+        waitUntil: "networkidle0",
+    });
+    // 获取页面上特定元素的位置和尺寸
+    const element = await page.$(".chat-container"); // 可以用CSS选择器选中你要截取的部分
+    // 直接截图该元素
+    await element.screenshot({
+        path: "./chat.png",
+        type: "jpeg",
+        fullPage: false,
+        omitBackground: false,
+        quality: 50,
+    });
+    await e.reply(segment.image(fs.readFileSync("./chat.png")));
+}
+
+export class kimiJS extends plugin {
+    constructor() {
+        super({
+            name: 'Moonshot AI',
+            dsc: 'Moonshot AI Assistant',
+            event: 'message',
+            priority: 1,
+            rule: [
+                {
+                    reg: '^#kimi(.*)$',
+                    fnc: 'chat'
+                }
+            ]
+        });
+        // 配置文件
+        this.toolsConfig = config.getConfig("tools");
+        // 设置基础 URL 和 headers
+        this.baseURL = this.toolsConfig.aiBaseURL;
+        this.headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + this.toolsConfig.aiApiKey
+        };
+    }
+
+    async chat(e) {
+        const query = e.msg.replace(/^#kimi/, '').trim();
+        // 请求Kimi
+        const completion = await fetch(this.baseURL + "/v1/chat/completions", {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({
+                model: "moonshot-v1-8k",
+                messages: [
+                    {
+                        "role": "system",
+                        "content": this.prompt,
+                    },
+                    {
+                        role: "user",
+                        content: query
+                    },
+                ],
+            }),
+            timeout: 100000
+        });
+        await markdownRender(e, query, (await completion.json()).choices[0].message.content, true);
+        return true;
+    }
+}
+
+
+const renderHTML = (query, aiContent) => {
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -103,75 +179,5 @@ async function markdownRender(e, query, aiContent) {
         </div>
     </div>
 </body>
-</html>`;
-    await page.setViewport({
-        width: 1280,
-        height: 720,
-        deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
-    });
-    // 设置页面内容为包含 Base64 图片的 HTML
-    await page.setContent(htmlContent, {
-        waitUntil: "networkidle0",
-    });
-    // 获取页面上特定元素的位置和尺寸
-    const element = await page.$(".chat-container"); // 可以用CSS选择器选中你要截取的部分
-    // 直接截图该元素
-    await element.screenshot({
-        path: "./chat.png",
-        type: "jpeg",
-        fullPage: false,
-        omitBackground: false,
-        quality: 50,
-    });
-    await e.reply(segment.image(fs.readFileSync("./chat.png")));
-}
-
-export class kimiJS extends plugin {
-    constructor() {
-        super({
-            name: 'Moonshot AI',
-            dsc: 'Moonshot AI Assistant',
-            event: 'message',
-            priority: 1,
-            rule: [
-                {
-                    reg: '^#kimi(.*)$',
-                    fnc: 'chat'
-                }
-            ]
-        });
-        // 配置文件
-        this.toolsConfig = config.getConfig("tools");
-        // 设置基础 URL 和 headers
-        this.baseURL = this.toolsConfig.aiBaseURL;
-        this.headers = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + this.toolsConfig.aiApiKey
-        };
-    }
-
-    async chat(e) {
-        const query = e.msg.replace(/^#kimi/, '').trim();
-        // 请求Kimi
-        const completion = await fetch(this.baseURL + "/v1/chat/completions", {
-            method: 'POST',
-            headers: this.headers,
-            body: JSON.stringify({
-                model: "moonshot-v1-8k",
-                messages: [
-                    {
-                        "role": "system",
-                        "content": this.prompt,
-                    },
-                    {
-                        role: "user",
-                        content: query
-                    },
-                ],
-            }),
-            timeout: 100000
-        });
-        await markdownRender(e, query, (await completion.json()).choices[0].message.content, true);
-        return true;
-    }
+</html>`
 }
