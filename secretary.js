@@ -75,7 +75,7 @@ export class Secretary extends plugin {
                 todoList[groupId][user_id] = [];
             }
             logger.info(todoList);
-            todoList[groupId][user_id].push(`${ card || nickname }：${ message }`);
+            todoList[groupId][user_id].push(`${ card || nickname }：${ message || '' }`);
             logger.info(`[小秘书] 记录${user_id}到 TODO 完成`);
             return true;
         })
