@@ -36,7 +36,7 @@ export class kimiJS extends plugin {
             aiContent = aiContent.split("搜索结果来自：")[0];
         }
 
-        const htmlContent = renderHTML(query, aiContent);
+        const htmlContent = renderHTML(e, query, aiContent);
 
         await page.setViewport({
             width: 1280,
@@ -87,7 +87,7 @@ export class kimiJS extends plugin {
 }
 
 
-const renderHTML = (query, aiContent) => {
+const renderHTML = (e, query, aiContent) => {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
