@@ -1,8 +1,10 @@
-import puppeteer from "../../lib/puppeteer/puppeteer.js";
 import fs from "fs";
+import puppeteer from "../../lib/puppeteer/puppeteer.js";
 
 // 截图前等待的时间
 const screenWaitTime = 3;
+
+let fullScreen = false;
 
 export class Screenshot extends plugin {
     constructor() {
@@ -21,6 +23,12 @@ export class Screenshot extends plugin {
                 },
                 {
                     /** 命令正则匹配 */
+                    reg: "^截图切换$",
+                    /** 执行方法 */
+                    fnc: "screenshotStatus",
+                },
+                {
+                    /** 命令正则匹配 */
                     reg: "^#gittr$",
                     /** 执行方法 */
                     fnc: "githubTrending",
@@ -33,12 +41,24 @@ export class Screenshot extends plugin {
         return new Promise(resolve => setTimeout(resolve, timeout));
     }
 
+    async screenshotStatus(e) {
+        fullScreen = !fullScreen;
+        if (fullScreen === true) {
+            e.reply("截图已开启全屏模式");
+            logger.info("[截图] 开启全屏模式");
+        } else {
+            e.reply("截图已关闭全屏模式");
+            logger.info("[截图] 关闭全屏模式");
+        }
+        return true;
+    }
+
     async screenshot(e) {
         if (!e.isMaster) {
             logger.info("[截图] 检测到当前不是主人，忽略");
             return;
         }
-        await this.sendScreenShot(this.e.msg.trim());
+        await this.sendScreenShot(this.e.msg.trim(), fullScreen);
     }
 
     async githubTrending(e) {
@@ -91,7 +111,33 @@ export class Screenshot extends plugin {
 
         const screenshotBase64 = fs.readFileSync("./screenshot.png", "base64");
         // 生成包含 Base64 图片的 HTML
-        const htmlContent = `
+        const htmlContent = screenRender(screenshotBase64);
+        await page.setViewport({
+            width: 1280,
+            height: 720,
+            deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
+        });
+        // 设置页面内容为包含 Base64 图片的 HTML
+        await page.setContent(htmlContent, {
+            waitUntil: "networkidle0",
+        });
+        // 获取页面上特定元素的位置和尺寸
+        const element = await page.$(".browser-window"); // 可以用CSS选择器选中你要截取的部分
+        // 直接截图该元素
+        await element.screenshot({
+            path: "./screenshot.png",
+            type: "jpeg",
+            fullPage: false,
+            omitBackground: false,
+            quality: 50,
+        });
+
+        await this.e.reply(segment.image(fs.readFileSync("./screenshot.png")));
+    }
+}
+
+function screenRender(screenshotBase64) {
+    return `
      <!DOCTYPE html>
     <html lang="zh-CN">
     <head>
@@ -105,7 +151,7 @@ export class Screenshot extends plugin {
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                height: 100vh;
+                height: 500vh;
                 margin: 0;
             }
             .browser-window {
@@ -160,33 +206,11 @@ export class Screenshot extends plugin {
                     <div class="maximize"></div>
                 </div>
             </div>
-            <img class="screenshot" src="data:image/png;base64,${screenshotBase64}" alt="Screenshot">
+            <img class="screenshot" src="data:image/png;base64,${ screenshotBase64 }" alt="Screenshot">
         </div>
 </div>
 
     </body>
     </html>
   `;
-        await page.setViewport({
-            width: 1280,
-            height: 720,
-            deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
-        });
-        // 设置页面内容为包含 Base64 图片的 HTML
-        await page.setContent(htmlContent, {
-            waitUntil: "networkidle0",
-        });
-        // 获取页面上特定元素的位置和尺寸
-        const element = await page.$(".browser-window"); // 可以用CSS选择器选中你要截取的部分
-        // 直接截图该元素
-        await element.screenshot({
-            path: "./screenshot.png",
-            type: "jpeg",
-            fullPage: false,
-            omitBackground: false,
-            quality: 50,
-        });
-
-        await this.e.reply(segment.image(fs.readFileSync("./screenshot.png")));
-    }
 }
