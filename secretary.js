@@ -63,7 +63,7 @@ export class Secretary extends plugin {
                 await e.bot.sendApi("delete_msg", {
                     message_id: e.message_seq || e.message_id
                 });
-                e.reply(`${ masterName }正在忙碌哦~~！忙完就会回复你了哟~！🤟😘`, true);
+                e.reply(`👋 Hi，这里是${ masterName }的小秘书\n\n👨‍💻 ${ masterName }正在忙碌哦~~！\n\n忙完就会回复你了哟~！🤟😘`, true);
             }
             const { user_id, nickname, card } = e.sender;
             const groupId = e.group_id;

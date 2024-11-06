@@ -3,39 +3,6 @@ import puppeteer from "../../../lib/puppeteer/puppeteer.js";
 import fs from "fs";
 import { marked } from "marked"
 
-async function markdownRender(e, query, aiContent) {
-    // 打开一个新的页面
-    const browser = await puppeteer.browserInit();
-    const page = await browser.newPage();
-
-    if (aiContent.indexOf("搜索结果来自：") !== -1) {
-        aiContent = aiContent.split("搜索结果来自：")[0];
-    }
-
-    const htmlContent = renderHTML(query, aiContent);
-
-    await page.setViewport({
-        width: 1280,
-        height: 720,
-        deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
-    });
-    // 设置页面内容为包含 Base64 图片的 HTML
-    await page.setContent(htmlContent, {
-        waitUntil: "networkidle0",
-    });
-    // 获取页面上特定元素的位置和尺寸
-    const element = await page.$(".chat-container"); // 可以用CSS选择器选中你要截取的部分
-    // 直接截图该元素
-    await element.screenshot({
-        path: "./chat.png",
-        type: "jpeg",
-        fullPage: false,
-        omitBackground: false,
-        quality: 50,
-    });
-    await e.reply(segment.image(fs.readFileSync("./chat.png")));
-}
-
 export class kimiJS extends plugin {
     constructor() {
         super({
@@ -60,6 +27,39 @@ export class kimiJS extends plugin {
         };
     }
 
+    async markdownRender(e, query, aiContent) {
+        // 打开一个新的页面
+        const browser = await puppeteer.browserInit();
+        const page = await browser.newPage();
+
+        if (aiContent.indexOf("搜索结果来自：") !== -1) {
+            aiContent = aiContent.split("搜索结果来自：")[0];
+        }
+
+        const htmlContent = renderHTML(query, aiContent);
+
+        await page.setViewport({
+            width: 1280,
+            height: 720,
+            deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
+        });
+        // 设置页面内容为包含 Base64 图片的 HTML
+        await page.setContent(htmlContent, {
+            waitUntil: "networkidle0",
+        });
+        // 获取页面上特定元素的位置和尺寸
+        const element = await page.$(".chat-container"); // 可以用CSS选择器选中你要截取的部分
+        // 直接截图该元素
+        await element.screenshot({
+            path: "./chat.png",
+            type: "jpeg",
+            fullPage: false,
+            omitBackground: false,
+            quality: 50,
+        });
+        await e.reply(segment.image(fs.readFileSync("./chat.png")));
+    }
+
     async chat(e) {
         const query = e.msg.replace(/^#kimi/, '').trim();
         // 请求Kimi
@@ -81,7 +81,7 @@ export class kimiJS extends plugin {
             }),
             timeout: 100000
         });
-        await markdownRender(e, query, (await completion.json()).choices[0].message.content, true);
+        await this.markdownRender(e, query, (await completion.json()).choices[0].message.content, true);
         return true;
     }
 }
