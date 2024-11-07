@@ -175,6 +175,8 @@ const masterId = "";
 
 3. 开始使用
 
+![img.png](img/img9.webp)
+
 ```shell
 1. 小秘书切换状态
 2. 小秘书TODO
