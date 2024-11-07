@@ -107,7 +107,7 @@ export class Secretary extends plugin {
         await page.screenshot({
             path: "./todo.png",
             type: "jpeg",
-            fullPage: false,
+            fullPage: true,
             omitBackground: false,
             quality: 50,
         });
