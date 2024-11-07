@@ -6,6 +6,8 @@ const queue = new PQueue({ concurrency: 20 });
 
 // TODO 这里需要修改你的QQ号
 const masterId = "";
+// TODO 是否启动文字版的TODO，防止部分机子无法看到TODO
+let isText = false;
 
 // 会动态获取
 let masterName = "";
@@ -90,6 +92,19 @@ export class Secretary extends plugin {
     async todoList(e) {
         const groupId = e.group_id;
         const curGroupTodoList = todoList[groupId] = todoList[groupId] || {};
+        // 如果启用了文字版逻辑
+        if (isText) {
+            let keys = "";
+            for (let key of Object.keys(curGroupTodoList)) {
+                let content = `${key}: \n`;
+                for (let item of curGroupTodoList[key]) {
+                    content += `- ${ item }\n`;
+                }
+                keys += content + "\n";
+            }
+            e.reply(`群友需求 Todo List：\n${keys}`, true);
+            return;
+        }
         const finalHTML = renderHTML(curGroupTodoList);
         // 打开一个新的页面
         const browser = await puppeteer.browserInit();
@@ -225,7 +240,7 @@ const renderHTML = (curGroupTodoList) => {
 <body>
     <ul class="todo-list">
         ${ Object.keys(curGroupTodoList).map(key => {
-            return `
+        return `
             <li class="todo-item">
                 <div class="user-info">
                     <img src="http://q1.qlogo.cn/g?b=qq&nk=${key}&s=100" alt="用户头像">
@@ -238,7 +253,7 @@ const renderHTML = (curGroupTodoList) => {
                 </div>
             </li>
             `
-        })}
+    })}
     </ul>
 </body>
 </html>
