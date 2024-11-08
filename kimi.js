@@ -64,7 +64,20 @@ export class kimiJS extends plugin {
             }),
             timeout: 100000
         });
-        await e.reply((await completion.json()).choices[0].message.content, true);
+        const content = (await completion.json()).choices[0].message.content;
+        const contentSplit = content.split("搜索结果来自：")
+        await e.reply(contentSplit[0], true);
+        logger.info(contentSplit?.[1])
+        await e.reply(Bot.makeForwardMsg(contentSplit?.[1] && contentSplit[1]
+            .trim()
+            .split("\n")
+            .map(item => {
+                return {
+                    message: {type: "text", text: item || ""},
+                    nickname: e.sender.card || e.user_id,
+                    user_id: e.user_id,
+                }
+            })))
         return true;
     }
 }

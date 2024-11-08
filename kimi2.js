@@ -32,8 +32,11 @@ export class kimiJS extends plugin {
         const browser = await puppeteer.browserInit();
         const page = await browser.newPage();
 
+        let aiReference;
         if (aiContent.indexOf("搜索结果来自：") !== -1) {
-            aiContent = aiContent.split("搜索结果来自：")[0];
+            const aiContentSplit = aiContent.split("搜索结果来自：");
+            aiContent = aiContentSplit[0];
+            aiReference = aiContentSplit?.[1] || "";
         }
 
         const htmlContent = renderHTML(e, query, aiContent);
@@ -58,6 +61,16 @@ export class kimiJS extends plugin {
             quality: 50,
         });
         await e.reply(segment.image(fs.readFileSync("./chat.png")));
+        aiReference !== "" && await e.reply(Bot.makeForwardMsg(aiReference
+            .trim()
+            .split("\n")
+            .map(item => {
+                return {
+                    message: {type: "text", text: item || ""},
+                    nickname: e.sender.card || e.user_id,
+                    user_id: e.user_id,
+                }
+            })))
     }
 
     async chat(e) {
