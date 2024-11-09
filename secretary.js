@@ -39,17 +39,27 @@ export class Secretary extends plugin {
                 {
                     reg: "^小秘书cls$",
                     fnc: "todoCls",
-                },
-                {
-                    reg: "^小秘书我要",
-                    fnc: "getSpecialTitle",
                 }
             ]
         })
     }
 
+    async translate_en2zh(e) {
+        const translateResultResp = await fetch(`http://api.yujn.cn/api/fanyi.php?msg=${encodeURIComponent(e.msg)}`, {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }).then(resp => resp.text());
+        e.reply(`小秘书自动翻译：\n${ translateResultResp.split("翻译后：")?.[1] || "" }`, true);
+    }
+
     async withstand(e) {
         queue.add(async () => {
+            // 自主翻译
+            if (e.msg !== undefined && isAllEnglishWithPunctuation(e.msg)) {
+                await this.translate_en2zh(e);
+            }
             if (e.at !== masterId) {
                 return;
             }
@@ -134,17 +144,17 @@ export class Secretary extends plugin {
         e.reply("已清除所有 TODO");
         return true;
     }
+}
 
-    async getSpecialTitle(e) {
-        logger.info(e);
-        const title = e.msg.replace(/^小秘书我要/, "").trim();
-        await e.bot.sendApi("set_group_special_title", {
-            group_id: e.group_id,
-            user_id: e.user_id,
-            special_title: title,
-        });
-        e.reply(`已为你设置了群荣誉：${ title }`, true);
+function isAllEnglishWithPunctuation(str) {
+    // 先检查字符串是否为纯数字
+    if (/^\d+$/.test(str)) {
+        return false; // 纯数字直接返回 false
     }
+    // 正则表达式匹配英文字母、数字、空格、常见标点符号，以及一些特殊符号
+    const regex = /^[A-Za-z0-9\s.,;:'"()%\-–—!?‘’“”]+$/;
+    // 检查字符串不是单独的问号
+    return regex.test(str) && str !== '?';
 }
 
 const renderHTML = (curGroupTodoList) => {
