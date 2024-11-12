@@ -1,7 +1,11 @@
 import config from "../model/config.js";
 import puppeteer from "../../../lib/puppeteer/puppeteer.js";
+import axios from "axios";
 import fs from "fs";
+import path from "path";
 import { marked } from "marked"
+
+const kimiFilePath = "./data/kimiImgTmp.pdf";
 
 export class kimiJS extends plugin {
     constructor() {
@@ -12,9 +16,9 @@ export class kimiJS extends plugin {
             priority: 1,
             rule: [
                 {
-                    reg: '^#kimi(.*)$',
+                    reg: '^#kimi',
                     fnc: 'chat'
-                }
+                },
             ]
         });
         // 配置文件
@@ -25,6 +29,52 @@ export class kimiJS extends plugin {
             "Content-Type": "application/json",
             "Authorization": "Bearer " + this.toolsConfig.aiApiKey
         };
+    }
+
+    /**
+     * 文档下载
+     * @param url
+     * @param outputPath
+     * @returns {Promise<void>}
+     */
+    async downloadFile(url, outputPath) {
+        try {
+            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            await fs.promises.writeFile(outputPath, response.data);
+            logger.info(`文件已成功下载至 ${outputPath}`);
+        } catch (error) {
+            logger.error('无法下载文件:', error);
+        }
+    }
+
+    /**
+     * 获取最新的文档
+     * @param e
+     * @returns {Promise<*|string>}
+     */
+    async getLatestDocument(e) {
+        // 获取最新的聊天记录，阈值为5
+        const latestChat = await e.bot.sendApi("get_group_msg_history", {
+            "group_id": e.group_id,
+            "count": 10
+        });
+        const messages = latestChat.data.messages;
+        let file_id = "";
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const message = messages?.[i]?.message;
+            if (message?.[0]?.type === "file") {
+                file_id = message?.[0].data?.file_id;
+            }
+        }
+        if (file_id === "") {
+            return "";
+        }
+        // 获取文件信息
+        const latestFileUrl = await e.bot.sendApi("get_group_file_url", {
+            "group_id": e.group_id,
+            "file_id": file_id
+        });
+        return latestFileUrl.data.url;
     }
 
     async markdownRender(e, query, aiContent) {
@@ -61,7 +111,7 @@ export class kimiJS extends plugin {
             quality: 50,
         });
         await e.reply(segment.image(fs.readFileSync("./chat.png")));
-        aiReference !== "" && await e.reply(Bot.makeForwardMsg(aiReference
+        aiReference !== undefined && await e.reply(Bot.makeForwardMsg(aiReference
             .trim()
             .split("\n")
             .map(item => {
@@ -75,6 +125,11 @@ export class kimiJS extends plugin {
 
     async chat(e) {
         const query = e.msg.replace(/^#kimi/, '').trim();
+        // 文档处理
+        if (query.startsWith("d")) {
+            await this.document(e);
+            return true;
+        }
         // 请求Kimi
         const completion = await fetch(this.baseURL + "/v1/chat/completions", {
             method: 'POST',
@@ -114,6 +169,51 @@ export class kimiJS extends plugin {
             timeout: 100000
         });
         await this.markdownRender(e, query, (await completion.json()).choices[0].message.content, true);
+        return true;
+    }
+
+    async document(e) {
+        const query = e.msg.replace(/^#kimid/, '').trim();
+        e.reply("正在获取聊天最新的文档文件，请稍候...", true);
+        let url = await this.getLatestDocument(e);
+        if (url === "") {
+            e.reply("没有找到聊天最新的文档文件", true);
+            return false;
+        }
+        url += "demo.pdf";
+        // 下载pdf并转换成base64
+        await this.downloadFile(url, kimiFilePath);
+        const base64Data = await toBase64(kimiFilePath);
+        setTimeout(async () => {
+            // 发送请求
+            const completion = await fetch(this.baseURL + "/v1/chat/completions", {
+                method: 'POST',
+                headers: this.headers,
+                body: JSON.stringify({
+                    model: "moonshot-v1-auto",
+                    messages: [
+                        {
+                            role: "user",
+                            content: [
+                                {
+                                    type: "file",
+                                    file_url: {
+                                        url: base64Data,
+                                    }
+                                },
+                                {
+                                    type: "text",
+                                    text: query || "文档里说了什么？",
+                                }
+                            ],
+                        },
+                    ],
+                }),
+                timeout: 500000
+            });
+            const respContent = (await completion.json());
+            await this.markdownRender(e, query || "文档里说了什么？", respContent.choices[0].message.content);
+        }, 1000)
         return true;
     }
 }
@@ -213,3 +313,38 @@ const renderHTML = (e, query, aiContent) => {
 </body>
 </html>`
 }
+
+/**
+ * 转换路径图片为base64格式
+ * @param {string} filePath - 图片路径
+ * @returns {Promise<string>} Base64字符串
+ */
+async function toBase64(filePath) {
+    try {
+        const fileData = await fs.promises.readFile(filePath);
+        const base64Data = fileData.toString('base64');
+        return `data:${getMimeType(filePath)};base64,${base64Data}`;
+    } catch (error) {
+        logger.info(error);
+    }
+}
+
+/**
+ * 辅助函数：根据文件扩展名获取MIME类型
+ * @param {string} filePath - 文件路径
+ * @returns {string} MIME类型
+ */
+function getMimeType(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    return mimeTypes[ext] || 'application/octet-stream';
+}
+
+const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+    // 添加其他文件类型和MIME类型的映射
+};
