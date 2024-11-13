@@ -5,7 +5,11 @@ import fs from "fs";
 import path from "path";
 import { marked } from "marked"
 
+// 存储pdf、png位置
 const kimiFilePath = "./data/kimiImgTmp.pdf";
+let kimiImgPath = "./data/kimiImgTmp.png";
+// 搜索聊天记录阈值，建议5~10
+const SEARCH_THRESHOLD = 10;
 
 export class kimiJS extends plugin {
     constructor() {
@@ -32,6 +36,26 @@ export class kimiJS extends plugin {
     }
 
     /**
+     * 图片下载
+     * @param url
+     * @param imgPath
+     * @returns {Promise<unknown | void>}
+     */
+    async downloadImage(url, imgPath) {
+        return axios({
+            url,
+            method: 'GET',
+            responseType: 'stream'
+        }).then(response => {
+            response.data.pipe(fs.createWriteStream(imgPath))
+                .on('finish', () => logger.info('图片下载完成，准备上传给Kimi'))
+                .on('error', err => logger.error('图片下载失败:', err.message));
+        }).catch(err => {
+            logger.error('图片地址访问失败:', err.message);
+        });
+    }
+
+    /**
      * 文档下载
      * @param url
      * @param outputPath
@@ -41,10 +65,27 @@ export class kimiJS extends plugin {
         try {
             const response = await axios.get(url, { responseType: 'arraybuffer' });
             await fs.promises.writeFile(outputPath, response.data);
-            logger.info(`文件已成功下载至 ${outputPath}`);
+            logger.info(`文件已成功下载至 ${ outputPath }`);
         } catch (error) {
             logger.error('无法下载文件:', error);
         }
+    }
+
+    async getLatestImage(e) {
+        // 获取最新的聊天记录，阈值为5
+        const latestChat = await e.bot.sendApi("get_group_msg_history", {
+            "group_id": e.group_id,
+            "count": SEARCH_THRESHOLD
+        });
+        const messages = latestChat.data.messages;
+        // 找到最新的图片
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const message = messages?.[i]?.message;
+            if (message?.[0]?.type === "image") {
+                return message?.[0].data?.url;
+            }
+        }
+        return "";
     }
 
     /**
@@ -56,7 +97,7 @@ export class kimiJS extends plugin {
         // 获取最新的聊天记录，阈值为5
         const latestChat = await e.bot.sendApi("get_group_msg_history", {
             "group_id": e.group_id,
-            "count": 10
+            "count": SEARCH_THRESHOLD
         });
         const messages = latestChat.data.messages;
         let file_id = "";
@@ -64,6 +105,7 @@ export class kimiJS extends plugin {
             const message = messages?.[i]?.message;
             if (message?.[0]?.type === "file") {
                 file_id = message?.[0].data?.file_id;
+                break;
             }
         }
         if (file_id === "") {
@@ -116,7 +158,7 @@ export class kimiJS extends plugin {
             .split("\n")
             .map(item => {
                 return {
-                    message: {type: "text", text: item || ""},
+                    message: { type: "text", text: item || "" },
                     nickname: e.sender.card || e.user_id,
                     user_id: e.user_id,
                 }
@@ -128,6 +170,9 @@ export class kimiJS extends plugin {
         // 文档处理
         if (query.startsWith("d")) {
             await this.document(e);
+            return true;
+        } else if (query.startsWith("p")) {
+            await this.image(e);
             return true;
         }
         // 请求Kimi
@@ -169,6 +214,53 @@ export class kimiJS extends plugin {
             timeout: 100000
         });
         await this.markdownRender(e, query, (await completion.json()).choices[0].message.content, true);
+        return true;
+    }
+
+    async image(e) {
+        e.reply("正在获取聊天最新的图片，请稍候...", true);
+        const query = e.msg.replace(/^#kimip/, '').trim();
+        const url = await this.getLatestImage(e);
+        if (url === "") {
+            e.reply("没有找到聊天最新的图片", true);
+            return false;
+        }
+        // 下载图片
+        kimiImgPath = path.resolve(kimiImgPath);
+        await this.downloadImage(url, kimiImgPath);
+        setTimeout(async () => {
+            // 转换为base64
+            const base64 = await toBase64(kimiImgPath);
+            // 发送请求
+            const completion = await fetch(this.baseURL + "/v1/chat/completions", {
+                method: 'POST',
+                headers: this.headers,
+                body: JSON.stringify({
+                    model: "step",
+                    messages: [
+                        {
+                            role: "user",
+                            content: [
+                                {
+                                    type: "image_url",
+                                    image_url: {
+                                        url: base64,
+                                    }
+                                },
+                                {
+                                    type: "text",
+                                    text: query || "图片中有什么？",
+                                }
+                            ],
+                        },
+                    ],
+                }),
+                timeout: 100000
+            });
+            const respContent = (await completion.json());
+            await this.markdownRender(e, query || "图片中有什么？", respContent.choices[0].message.content);
+        }, 1000);
+
         return true;
     }
 
@@ -323,7 +415,7 @@ async function toBase64(filePath) {
     try {
         const fileData = await fs.promises.readFile(filePath);
         const base64Data = fileData.toString('base64');
-        return `data:${getMimeType(filePath)};base64,${base64Data}`;
+        return `data:${ getMimeType(filePath) };base64,${ base64Data }`;
     } catch (error) {
         logger.info(error);
     }
