@@ -218,13 +218,22 @@ export class kimiJS extends plugin {
     }
 
     async image(e) {
-        e.reply("正在获取聊天最新的图片，请稍候...", true);
         const query = e.msg.replace(/^#kimip/, '').trim();
-        const url = await this.getLatestImage(e);
-        if (url === "") {
-            e.reply("没有找到聊天最新的图片", true);
-            return false;
+        let url;
+        if (e?.reply_id !== undefined || e?.reply_id !== '') {
+            e.reply("正在上传引用图片，请稍候...", true);
+            const replyMsg = await e.getReply();
+            const message = replyMsg?.message;
+            url = message?.[0]?.url;
+        } else {
+            e.reply("正在获取聊天最新的图片，请稍候...", true);
+            url = await this.getLatestImage(e);
+            if (url === "") {
+                e.reply("没有找到聊天最新的图片", true);
+                return false;
+            }
         }
+        logger.info(url);
         // 下载图片
         kimiImgPath = path.resolve(kimiImgPath);
         await this.downloadImage(url, kimiImgPath);
@@ -236,7 +245,7 @@ export class kimiJS extends plugin {
                 method: 'POST',
                 headers: this.headers,
                 body: JSON.stringify({
-                    model: "step",
+                    model: "moonshot-v1-auto",
                     messages: [
                         {
                             role: "user",
@@ -266,11 +275,25 @@ export class kimiJS extends plugin {
 
     async document(e) {
         const query = e.msg.replace(/^#kimid/, '').trim();
-        e.reply("正在获取聊天最新的文档文件，请稍候...", true);
-        let url = await this.getLatestDocument(e);
-        if (url === "") {
-            e.reply("没有找到聊天最新的文档文件", true);
-            return false;
+        let url;
+        if (e?.reply_id !== undefined || e?.reply_id !== '') {
+            e.reply("正在上传引用文档，请稍候...", true);
+            const replyMsg = await e.getReply();
+            const message = replyMsg?.message;
+            const file_id = message?.[0]?.file_id;
+            // 获取文件信息
+            const latestFileUrl = await e.bot.sendApi("get_group_file_url", {
+                "group_id": e.group_id,
+                "file_id": file_id
+            });
+            url = latestFileUrl.data.url;
+        } else {
+            e.reply("正在获取聊天最新的文档文件，请稍候...", true);
+            url = await this.getLatestDocument(e);
+            if (url === "") {
+                e.reply("没有找到聊天最新的文档文件", true);
+                return false;
+            }
         }
         url += "demo.pdf";
         // 下载pdf并转换成base64
