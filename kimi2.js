@@ -220,7 +220,7 @@ export class kimiJS extends plugin {
     async image(e) {
         const query = e.msg.replace(/^#kimip/, '').trim();
         let url;
-        if (e?.reply_id !== undefined || e?.reply_id !== '') {
+        if (e?.reply_id !== undefined) {
             e.reply("正在上传引用图片，请稍候...", true);
             const replyMsg = await e.getReply();
             const message = replyMsg?.message;
@@ -276,7 +276,7 @@ export class kimiJS extends plugin {
     async document(e) {
         const query = e.msg.replace(/^#kimid/, '').trim();
         let url;
-        if (e?.reply_id !== undefined || e?.reply_id !== '') {
+        if (e?.reply_id !== undefined) {
             e.reply("正在上传引用文档，请稍候...", true);
             const replyMsg = await e.getReply();
             const message = replyMsg?.message;
