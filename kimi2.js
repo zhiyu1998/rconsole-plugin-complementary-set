@@ -20,7 +20,7 @@ export class kimiJS extends plugin {
             priority: 1,
             rule: [
                 {
-                    reg: '^#kimi',
+                    reg: /^#[Kk][Ii][Mm][Ii]/,
                     fnc: 'chat'
                 },
             ]
@@ -166,12 +166,12 @@ export class kimiJS extends plugin {
     }
 
     async chat(e) {
-        const query = e.msg.replace(/^#kimi/, '').trim();
+        const query = e.msg.replace(/^#[Kk][Ii][Mm][Ii]/, '').trim();
         // 文档处理
-        if (query.startsWith("d")) {
+        if (query.startsWith("d") || query.startsWith("D")) {
             await this.document(e);
             return true;
-        } else if (query.startsWith("p")) {
+        } else if (query.startsWith("p") || query.startsWith("P")) {
             await this.image(e);
             return true;
         }
@@ -218,7 +218,7 @@ export class kimiJS extends plugin {
     }
 
     async image(e) {
-        const query = e.msg.replace(/^#kimip/, '').trim();
+        const query = e.msg.replace(/^#[Kk][Ii][Mm][Ii][Pp]/, '').trim();
         let url;
         if (e?.reply_id !== undefined) {
             e.reply("正在上传引用图片，请稍候...", true);
@@ -274,7 +274,7 @@ export class kimiJS extends plugin {
     }
 
     async document(e) {
-        const query = e.msg.replace(/^#kimid/, '').trim();
+        const query = e.msg.replace(/^#[Kk][Ii][Mm][Ii][Dd]/, '').trim();
         let url;
         if (e?.reply_id !== undefined) {
             e.reply("正在上传引用文档，请稍候...", true);
