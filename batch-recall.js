@@ -21,7 +21,7 @@ export class BatchRecall extends plugin {
                     fnc: "recall",
                 },
                 {
-                    reg: "^添加撤回对象$",
+                    reg: "^添加撤回对象",
                     fnc: "addRecallObj"
                 }
             ]
