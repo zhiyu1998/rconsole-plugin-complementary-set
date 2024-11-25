@@ -12,6 +12,7 @@
 - ✅ GPT-SoVITS 接口适配
 - ✅ NCQQ 3.4.6 以上快捷语音包
 - ✅ 小秘书，反击at小助手
+- ✅ LLama OCR
 
 ## kimi.js 使用指南
 
@@ -184,3 +185,30 @@ const masterId = "";
 ```
 
 切换到忙碌就会帮你反击at（前提你的机器人是管理员），然后做成todo统一处理
+
+## LLama OCR
+
+> 驱动自：https://github.com/Nutlope/llama-ocr
+
+1. 安装依赖
+
+```shell
+pnpm add llama-ocr -w
+```
+
+2. 克隆单个文件到 R 插件 app 下：
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/llama-ocr.js > plugins/rconsole-plugin/apps/llama-ocr.js
+```
+
+3. 到 [Together AI](https://www.together.ai/) 申请一个 Key，申请很快的，填入到 js 中
+
+```shell
+// https://www.together.ai/ 进行注册
+const TOGETHER_API_KEY = "";
+```
+
+4. 启动，就可以免费体验 LLama AI 的 OCR
+
+![PixPin_2024-11-25_22-05-13.png](https://s2.loli.net/2024/11/25/VBxj1Km5nrCXTls.png)
