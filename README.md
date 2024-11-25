@@ -212,3 +212,10 @@ const TOGETHER_API_KEY = "";
 4. 启动，就可以免费体验 LLama AI 的 OCR
 
 ![PixPin_2024-11-25_22-05-13.png](https://s2.loli.net/2024/11/25/VBxj1Km5nrCXTls.png)
+
+
+## 声明
+
+* 素材来源于网络，仅供交流学习使用
+* 严禁用于任何商业用途和非法行为
+* 如果对你有帮助辛苦给个star，这是对我最大的鼓励
