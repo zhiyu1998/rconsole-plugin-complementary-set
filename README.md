@@ -13,6 +13,7 @@
 - ✅ NCQQ 3.4.6 以上快捷语音包
 - ✅ 小秘书，反击at小助手
 - ✅ LLama OCR
+- ⚠️ Perplexity AI Proxy（🪜不好可能存在不稳定现象）
 
 ## kimi.js 使用指南
 
@@ -214,6 +215,22 @@ const TOGETHER_API_KEY = "";
 
 ![PixPin_2024-11-25_22-05-13.png](https://s2.loli.net/2024/11/25/VBxj1Km5nrCXTls.png)
 
+## Perplexity AI Proxy
+
+> 驱动来自：https://github.com/Archeb/pplx-proxy
+> ⚠️ 已知问题：付费用户（已购买 pro）无法使用pro进行搜索，免费用户倒是不影响
+
+1. 搭建方法：
+
+> https://github.com/Archeb/pplx-proxy/blob/main/usage.md
+
+2. 克隆 js
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/perplexity.js > plugins/example/perplexity.js
+```
+
+3. 使用 `#pplx` 就可以开始使用
 
 ## 声明
 
