@@ -218,6 +218,7 @@ const TOGETHER_API_KEY = "";
 ## Perplexity AI Proxy
 
 > 驱动来自：https://github.com/Archeb/pplx-proxy
+> 
 > ⚠️ 已知问题：付费用户（已购买 pro）无法使用pro进行搜索，免费用户倒是不影响
 
 1. 搭建方法：
