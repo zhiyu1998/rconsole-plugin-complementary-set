@@ -1,7 +1,7 @@
 import config from "../model/config.js";
 
 // 默认每小时推送一次，每2小时推送cron：0 */2 * * *
-const PUSH_CRON = "* * * * *";
+const PUSH_CRON = "0 * * * *";
 // 挖掘的历史消息
 const HISTORY_LENS = 5;
 // 推送的群组
