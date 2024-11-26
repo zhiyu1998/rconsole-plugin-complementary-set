@@ -1,9 +1,9 @@
 import config from "../model/config.js";
 
 // 默认每小时推送一次，每2小时推送cron：0 */2 * * *
-const PUSH_CRON = "0 * * * *";
+const PUSH_CRON = "0 8-20 * * *";
 // 挖掘的历史消息
-const HISTORY_LENS = 5;
+const HISTORY_LENS = 200;
 // 推送的群组
 const groupList = ['363022332'];
 
@@ -28,7 +28,7 @@ export class WhatsTalk extends plugin {
             fnc: () => this.pushWhatsTalk(),
             log: false
             // eslint-disable-next-line no-sequences
-        },
+        };
         // 配置文件
         this.toolsConfig = config.getConfig("tools");
         // 设置基础 URL 和 headers
@@ -71,6 +71,11 @@ export class WhatsTalk extends plugin {
         })
     }
 
+    async sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+
     async pushWhatsTalk() {
         if (groupList.length <= 0) {
             return false;
@@ -93,6 +98,7 @@ export class WhatsTalk extends plugin {
                 };
             })
             await Bot.pickGroup(groupList[i]).sendMsg(Bot.makeForwardMsg(forwardMsg));
+            await this.sleep(2000);
         }
     }
 
