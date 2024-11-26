@@ -14,6 +14,7 @@
 - ✅ 小秘书，反击at小助手
 - ✅ LLama OCR
 - ⚠️ Perplexity AI Proxy（🪜不好可能存在不稳定现象）
+- ✅ 他们在聊什么？
 
 ## kimi.js 使用指南
 
@@ -234,6 +235,18 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 ```
 
 3. 使用 `#pplx` 就可以开始使用
+
+## 他们在聊什么？
+
+1. 安装到 R 插件
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/whats-talk.js > plugins/rconsole-plugin/apps/whats-talk.js
+```
+
+2. 发送 `#他们在聊什么`
+
+![PixPin_2024-11-26_14-11-38.png](https://s2.loli.net/2024/11/26/cnyeHf7T1iR2zSl.png)
 
 ## 声明
 
