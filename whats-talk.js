@@ -35,16 +35,23 @@ export class WhatsTalk extends plugin {
         // 处理消息
         return messages
             .map(message => {
-                // 获取 card 和消息内容
+                // 获取时间、card 和消息内容
+                const time = this.formatTimestamp(message.time);
                 const card = message.sender.card || message.sender.nickname; // 使用 card 或 fallback 为 nickname
                 const textMessages = message.message
                     .filter(msg => msg.type === "text") // 筛选出 type 为 text 的消息
                     .map(msg => msg.data.text); // 获取 text 数据
 
                 // 格式化结果
-                return textMessages.map(text => `${card}:${text}`);
+                return textMessages.map(text => `[${time}]${card}:${text}`);
             })
             .flat(); // 将嵌套数组展平
+    }
+
+    // 时间戳转换函数
+    formatTimestamp(timestamp) {
+        const date = new Date(timestamp * 1000); // 将时间戳（秒）转换为毫秒
+        return date.toISOString().replace("T", " ").split(".")[0]; // 格式化为 YYYY-MM-DD HH:mm:ss
     }
 
     textArrayToMakeForward(e, textArray) {
@@ -67,7 +74,7 @@ export class WhatsTalk extends plugin {
                 messages: [
                     {
                         "role": "system",
-                        "content": "你是一个群友聊天总结专家，帮助新来的群友总结最近聊了什么内容，下面是我发送给你的聊天记录其中分号左边是用户名字，右边是说话内容。要求格式不使用markdown，重点标出总结内容中的用户即可。"
+                        "content": "你是一个群友聊天总结专家，帮助新来的群友总结最近聊了什么内容，下面是我发送给你的聊天记录其中分号左边是用户名字和发送的时间，右边是说话内容。要求格式不使用markdown，按照1小时的颗粒度时间线进行总结，然后重点标出总结内容中的用户即可。"
                     },
                     {
                         role: "user",
@@ -78,6 +85,6 @@ export class WhatsTalk extends plugin {
             timeout: 100000
         });
         const content = (await completion.json()).choices[0].message.content;
-        await e.reply(Bot.makeForwardMsg(this.textArrayToMakeForward(e, [content]), true));
+        await e.reply(Bot.makeForwardMsg(this.textArrayToMakeForward(e, [content])));
     }
 }
