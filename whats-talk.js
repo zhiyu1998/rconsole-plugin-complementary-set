@@ -1,6 +1,11 @@
 import config from "../model/config.js";
 
-const HISTORY_LENS = 200;
+// 默认每小时推送一次，每2小时推送cron：0 */2 * * *
+const PUSH_CRON = "* * * * *";
+// 挖掘的历史消息
+const HISTORY_LENS = 5;
+// 推送的群组
+const groupList = ['363022332'];
 
 export class WhatsTalk extends plugin {
     constructor() {
@@ -11,11 +16,19 @@ export class WhatsTalk extends plugin {
             priority: 5000,
             rule: [
                 {
-                    reg: "^#他们在聊什么",
+                    reg: "^#(他们|群友)在聊什么",
                     fnc: "whatsTalk",
                 }
             ]
         })
+        // eslint-disable-next-line no-unused-expressions
+        this.task = {
+            cron: PUSH_CRON,
+            name: '推送群友在聊什么',
+            fnc: () => this.pushWhatsTalk(),
+            log: false
+            // eslint-disable-next-line no-sequences
+        },
         // 配置文件
         this.toolsConfig = config.getConfig("tools");
         // 设置基础 URL 和 headers
@@ -26,12 +39,13 @@ export class WhatsTalk extends plugin {
         };
     }
 
-    async getHistoryChat(e) {
-        const data = await e.bot.sendApi("get_group_msg_history", {
-            "group_id": e.group_id,
+    async getHistoryChat(e, group_id = "") {
+        const data = await Bot.sendApi("get_group_msg_history", {
+            "group_id": group_id || e.group_id,
             "count": HISTORY_LENS
         })
         const messages = data?.data.messages;
+        logger.info(messages);
         // 处理消息
         return messages
             .map(message => {
@@ -57,8 +71,38 @@ export class WhatsTalk extends plugin {
         })
     }
 
+    async pushWhatsTalk() {
+        if (groupList.length <= 0) {
+            return false;
+        }
+        logger.info('[群友在聊什么]推送中...');
+        for (let i = 0; i < groupList.length; i++) {
+            // 告知当前群要推送了
+            await Bot.sendApi("send_group_msg", {
+                "group_id": groupList[i],
+                "message": "正在推送群友正在聊的内容...",
+            })
+            // 推送过程
+            const messages = await this.getHistoryChat(null, groupList[i]);
+            const content = await this.chat(messages);
+            const forwardMsg = [content].map(item => {
+                return {
+                    message: { type: "text", text: item },
+                    nickname: Bot.info.nickname,
+                    user_id: Bot.info.user_id,
+                };
+            })
+            await Bot.pickGroup(groupList[i]).sendMsg(Bot.makeForwardMsg(forwardMsg));
+        }
+    }
+
     async whatsTalk(e) {
         const messages = await this.getHistoryChat(e);
+        const content = await this.chat(messages);
+        await e.reply(Bot.makeForwardMsg(this.textArrayToMakeForward(e, [content]), true));
+    }
+
+    async chat(messages) {
         const completion = await fetch(this.baseURL + "/v1/chat/completions", {
             method: 'POST',
             headers: this.headers,
@@ -77,7 +121,6 @@ export class WhatsTalk extends plugin {
             }),
             timeout: 100000
         });
-        const content = (await completion.json()).choices[0].message.content;
-        await e.reply(Bot.makeForwardMsg(this.textArrayToMakeForward(e, [content]), true));
+        return (await completion.json()).choices[0].message.content;
     }
 }
