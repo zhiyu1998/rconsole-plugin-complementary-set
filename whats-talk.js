@@ -47,6 +47,16 @@ export class WhatsTalk extends plugin {
             .flat(); // 将嵌套数组展平
     }
 
+    textArrayToMakeForward(e, textArray) {
+        return textArray.map(item => {
+            return {
+                message: { type: "text", text: item },
+                nickname: e.sender.card || e.user_id,
+                user_id: e.user_id,
+            };
+        })
+    }
+
     async whatsTalk(e) {
         const messages = await this.getHistoryChat(e);
         const completion = await fetch(this.baseURL + "/v1/chat/completions", {
@@ -68,6 +78,6 @@ export class WhatsTalk extends plugin {
             timeout: 100000
         });
         const content = (await completion.json()).choices[0].message.content;
-        await e.reply(content, true);
+        await e.reply(Bot.makeForwardMsg(this.textArrayToMakeForward(e, [content]), true));
     }
 }
