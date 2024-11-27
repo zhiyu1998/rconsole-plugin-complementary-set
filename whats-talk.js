@@ -41,7 +41,7 @@ export class WhatsTalk extends plugin {
         this.baseURL = aiBaseURL || this.toolsConfig.aiBaseURL;
         this.headers = {
             "Content-Type": "application/json",
-            "Authorization": "Bearer " + aiApiKey || this.toolsConfig.aiApiKey
+            "Authorization": "Bearer " + (aiApiKey || this.toolsConfig.aiApiKey)
         };
     }
 
