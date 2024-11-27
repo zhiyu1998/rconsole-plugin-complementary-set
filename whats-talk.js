@@ -6,6 +6,12 @@ const PUSH_CRON = "0 8-20 * * *";
 const HISTORY_LENS = 200;
 // 推送的群组
 const groupList = ['575663150'];
+// ai 地址
+const aiBaseURL = "";
+// ai Key
+const aiApiKey = "";
+// ai 模型
+const model = "moonshot-v1-auto"
 
 export class WhatsTalk extends plugin {
     constructor() {
@@ -32,10 +38,10 @@ export class WhatsTalk extends plugin {
         // 配置文件
         this.toolsConfig = config.getConfig("tools");
         // 设置基础 URL 和 headers
-        this.baseURL = this.toolsConfig.aiBaseURL;
+        this.baseURL = aiBaseURL || this.toolsConfig.aiBaseURL;
         this.headers = {
             "Content-Type": "application/json",
-            "Authorization": "Bearer " + this.toolsConfig.aiApiKey
+            "Authorization": "Bearer " + aiApiKey || this.toolsConfig.aiApiKey
         };
     }
 
@@ -113,7 +119,7 @@ export class WhatsTalk extends plugin {
             method: 'POST',
             headers: this.headers,
             body: JSON.stringify({
-                model: this.model,
+                model: model,
                 messages: [
                     {
                         "role": "system",
