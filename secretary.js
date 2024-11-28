@@ -39,6 +39,10 @@ export class Secretary extends plugin {
                 {
                     reg: "^小秘书cls$",
                     fnc: "todoCls",
+                },
+                {
+                    reg: "^小秘书我要",
+                    fnc: "getSpecialTitle",
                 }
             ]
         })
@@ -143,6 +147,17 @@ export class Secretary extends plugin {
         todoList = {};
         e.reply("已清除所有 TODO");
         return true;
+    }
+
+    async getSpecialTitle(e) {
+        const title = e.msg.replace(/^小秘书我要/, "").trim();
+        logger.info(title);
+        await e.bot.sendApi("set_group_special_title", {
+            group_id: e.group_id,
+            user_id: e.user_id,
+            special_title: title,
+        });
+        e.reply(`已为你设置了群荣誉：${title}`, true);
     }
 }
 
