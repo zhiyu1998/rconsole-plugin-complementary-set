@@ -112,6 +112,11 @@ export class Gemini extends plugin {
                         url = latestFileUrl.data.url;
                         fileExt = await this.extractFileExtension(msg.data?.file_id);
                         break;
+                    } else if (fileType === "video") {
+                        // 如果是一个视频
+                        url = msg.data?.path;
+                        fileExt = await this.extractFileExtension(msg.data?.file_id);
+                        break;
                     }
                 }
             }
