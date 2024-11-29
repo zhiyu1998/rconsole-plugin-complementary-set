@@ -15,6 +15,7 @@
 - ✅ LLama OCR
 - ⚠️ Perplexity AI Proxy（🪜不好可能存在不稳定现象）
 - ✅ 他们在聊什么？
+- ✅ 多模态识别 - Gemini
 
 ## kimi.js 使用指南
 
@@ -247,6 +248,28 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 2. 发送 `#他们在聊什么`
 
 ![PixPin_2024-11-26_14-11-38.png](https://s2.loli.net/2024/11/26/cnyeHf7T1iR2zSl.png)
+
+## 多模态识别 - Gemini
+
+1. 去 Google studio 获取一个 API Key
+
+2. 克隆到 R 插件
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/gemini.js > plugins/rconsole-plugin/apps/gemini.js
+```
+
+3. 填写 API Key
+
+4. 安装 Gemini SDK
+
+```shell
+pnpm add @google/generative-ai -w
+```
+
+5. 启动，开始游玩
+
+![PixPin_2024-11-29_19-56-34.png](https://s2.loli.net/2024/11/29/JED4gQmY3l6bLCF.png)
 
 ## 声明
 
