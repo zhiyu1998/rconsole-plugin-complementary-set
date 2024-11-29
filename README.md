@@ -251,7 +251,7 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 
 ## 多模态识别 - Gemini
 
-1. 去 Google studio 获取一个 API Key
+1. 去 Google studio 获取一个 [API Key](https://aistudio.google.com/app/apikey?)
 
 2. 克隆到 R 插件
 
