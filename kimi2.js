@@ -5,9 +5,6 @@ import path from "path";
 import puppeteer from "../../../lib/puppeteer/puppeteer.js";
 import config from "../model/config.js";
 
-// 搜索聊天记录阈值，建议5~10
-const SEARCH_THRESHOLD = 10;
-
 export class kimiJS extends plugin {
     constructor() {
         super({
@@ -64,7 +61,7 @@ export class kimiJS extends plugin {
         try {
             const response = await axios.get(url, { responseType: 'arraybuffer' });
             await fs.promises.writeFile(outputPath, response.data);
-            logger.info(`文件已成功下载至 ${outputPath}`);
+            logger.info(`文件已成功下载至 ${ outputPath }`);
         } catch (error) {
             logger.error('无法下载文件:', error);
         }
@@ -112,8 +109,8 @@ export class kimiJS extends plugin {
                     message: { type: "text", text: item || "" },
                     nickname: e.sender.card || e.user_id,
                     user_id: e.user_id,
-                }
-            })))
+                };
+            })));
     }
 
     async getReplyMsg(e) {
@@ -121,11 +118,11 @@ export class kimiJS extends plugin {
             "group_id": e.group_id,
             "count": 1
         });
-        let msgId = msgList.data.messages[0]?.message[0]?.data.id
-        let msg = await e.bot.sendApi("get_msg",{
-            "message_id" : msgId
-        })
-        return msg.data
+        let msgId = msgList.data.messages[0]?.message[0]?.data.id;
+        let msg = await e.bot.sendApi("get_msg", {
+            "message_id": msgId
+        });
+        return msg.data;
     }
 
     async extractFileExtension(filename) {
@@ -163,13 +160,13 @@ export class kimiJS extends plugin {
                 url: url,
                 fileExt: await this.extractFileExtension(message?.[0]?.data?.file_id),
                 fileType
-            }
+            };
         }
         return {
             url: "",
             fileExt: "",
             fileType: ""
-        }
+        };
     }
 
     async chat(e) {
@@ -192,7 +189,7 @@ export class kimiJS extends plugin {
                 // 发送请求
                 const completion = await this.fetchKimiRequest(query || defaultQuery, "file", base64Data);
                 await this.markdownRender(e, query || defaultQuery, completion);
-            }, 1000)
+            }, 1000);
             return true;
         }
         // 请求Kimi
@@ -244,7 +241,7 @@ export class kimiJS extends plugin {
                 content = {
                     role: "user",
                     content: query
-                }
+                };
         }
 
         // 发起请求
@@ -343,20 +340,20 @@ const renderHTML = (e, query, aiContent) => {
         </div>
         <div class="message user-message">
             <div class="message-content">
-                <p>${query}</p>
+                <p>${ query }</p>
             </div>
-            <img src="http://q1.qlogo.cn/g?b=qq&nk=${e.user_id}&s=100" alt="User Avatar" class="avatar">
+            <img src="http://q1.qlogo.cn/g?b=qq&nk=${ e.user_id }&s=100" alt="User Avatar" class="avatar">
         </div>
         <div class="message ai-message">
             <img src="https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/kimi/kimi.png" alt="AI Avatar" class="avatar">
             <div class="message-content">
-                <div id="ai-content">${marked.parse(aiContent)}</div>
+                <div id="ai-content">${ marked.parse(aiContent) }</div>
             </div>
         </div>
     </div>
 </body>
-</html>`
-}
+</html>`;
+};
 
 /**
  * 转换路径图片为base64格式
@@ -367,7 +364,7 @@ async function toBase64(filePath) {
     try {
         const fileData = await fs.promises.readFile(filePath);
         const base64Data = fileData.toString('base64');
-        return `data:${getMimeType(filePath)};base64,${base64Data}`;
+        return `data:${ getMimeType(filePath) };base64,${ base64Data }`;
     } catch (error) {
         logger.info(error);
     }
