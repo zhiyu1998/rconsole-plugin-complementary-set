@@ -15,7 +15,7 @@
 - ✅ LLama OCR
 - ⚠️ Perplexity AI Proxy（🪜不好可能存在不稳定现象）
 - ✅ 他们在聊什么？
-- ✅ 多模态识别 - Gemini
+- ✅ 多模态识别 - Gemini（重构于群友 Chino 的 Gemini.js）
 
 ## kimi.js 使用指南
 
@@ -249,7 +249,7 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 
 ![PixPin_2024-11-26_14-11-38.png](https://s2.loli.net/2024/11/26/cnyeHf7T1iR2zSl.png)
 
-## 多模态识别 - Gemini
+## 多模态识别 - Gemini （重构于群友 Chino 的 Gemini.js）
 
 1. 去 Google studio 获取一个 [API Key](https://aistudio.google.com/app/apikey?)
 
