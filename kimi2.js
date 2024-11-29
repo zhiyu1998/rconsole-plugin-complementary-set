@@ -1,6 +1,6 @@
 import axios from "axios";
 import fs from "fs";
-import { marked } from "marked"
+import { marked } from "marked";
 import path from "path";
 import puppeteer from "../../../lib/puppeteer/puppeteer.js";
 import config from "../model/config.js";
@@ -67,7 +67,7 @@ export class kimiJS extends plugin {
         try {
             const response = await axios.get(url, { responseType: 'arraybuffer' });
             await fs.promises.writeFile(outputPath, response.data);
-            logger.info(`文件已成功下载至 ${ outputPath }`);
+            logger.info(`文件已成功下载至 ${outputPath}`);
         } catch (error) {
             logger.error('无法下载文件:', error);
         }
@@ -178,44 +178,8 @@ export class kimiJS extends plugin {
             return true;
         }
         // 请求Kimi
-        const completion = await fetch(this.baseURL + "/v1/chat/completions", {
-            method: 'POST',
-            headers: this.headers,
-            body: JSON.stringify({
-                model: this.aiModel,
-                messages: [
-                    {
-                        "role": "system",
-                        "content": "- Role: 信息提炼专家\n" +
-                            "- Background: 用户需要从提供的网页链接中快速获取关键信息，包括来源、标题、总结内容和关键段落。\n" +
-                            "- Profile: 你是一位专业的信息提炼专家，擅长快速阅读和总结大量文本，能够准确捕捉文章的核心要点，并以简洁明了的方式呈现给用户。\n" +
-                            "- Skills: 你需要具备快速阅读、信息提取、文本总结和概括的能力，同时需要对网络链接进行解析，以提取网页的元数据。\n" +
-                            "- Goals: 提供一个清晰、准确的信息总结，包括网页的来源、标题、总结内容和关键段落。\n" +
-                            "- Constrains: 确保信息的准确性和完整性，避免包含任何误导性或不相关的信息。\n" +
-                            "- OutputFormat: 结构化的文本输出，包括明确的标题和子标题，以及有序的列表或段落。\n" +
-                            "- Workflow:\n" +
-                            "  1. 解析用户提供的链接，确定网页的来源和标题。\n" +
-                            "  2. 阅读并分析网页内容，提炼出总结内容和关键段落。\n" +
-                            "  3. 以结构化格式输出信息，包括来源、标题、总结和关键段落。\n" +
-                            "- Examples:\n" +
-                            "  - 来源：sspai.com\n" +
-                            "  - 标题：USB-C 接口的全面解析\n" +
-                            "  - 总结的内容：本文全面解析了USB-C接口的特性、兼容性问题以及不同USB-C线缆的选择。强调USB-C只是接口形状，与其支持的特性无关。解释了USB-C接口的统一形状优势和潜在的兼容性问题，以及如何根据不同需求选择合适的线缆。\n" +
-                            "  - 关键段落：\n" +
-                            "    - USB-C 接口的好：统一的接口形状，简化了设备连接的复杂性。\n" +
-                            "    - USB-C 接口的坏：能插不等于能用，接口形状与支持的协议和速率是独立的。\n" +
-                            "    - 揭秘 USB-C 接口线缆的兼容逻辑：全针脚不等于全支持，eMarker芯片和ReTimer芯片的作用。\n" +
-                            "    - 那些 USB-C 所支持的协议：数据传输、视频输出、音频输出和电力传输的不同协议和兼容性问题。",
-                    },
-                    {
-                        role: "user",
-                        content: query
-                    },
-                ],
-            }),
-            timeout: 100000
-        });
-        await this.markdownRender(e, query, (await completion.json()).choices[0].message.content, true);
+        const completion = await fetch(query);
+        await this.markdownRender(e, query, completion);
         return true;
     }
 
@@ -243,33 +207,8 @@ export class kimiJS extends plugin {
             // 转换为base64
             const base64 = await toBase64(kimiImgPath);
             // 发送请求
-            const completion = await fetch(this.baseURL + "/v1/chat/completions", {
-                method: 'POST',
-                headers: this.headers,
-                body: JSON.stringify({
-                    model: this.aiModel,
-                    messages: [
-                        {
-                            role: "user",
-                            content: [
-                                {
-                                    type: "image_url",
-                                    image_url: {
-                                        url: base64,
-                                    }
-                                },
-                                {
-                                    type: "text",
-                                    text: query || "图片中有什么？",
-                                }
-                            ],
-                        },
-                    ],
-                }),
-                timeout: 100000
-            });
-            const respContent = (await completion.json());
-            await this.markdownRender(e, query || "图片中有什么？", respContent.choices[0].message.content);
+            const completion = await this.fetchKimiRequest(query || "图片中有什么？", "image", base64);
+            await this.markdownRender(e, query || "图片中有什么？", completion);
         }, 1000);
 
         return true;
@@ -303,35 +242,70 @@ export class kimiJS extends plugin {
         const base64Data = await toBase64(kimiFilePath);
         setTimeout(async () => {
             // 发送请求
-            const completion = await fetch(this.baseURL + "/v1/chat/completions", {
-                method: 'POST',
-                headers: this.headers,
-                body: JSON.stringify({
-                    model: this.aiModel,
-                    messages: [
-                        {
-                            role: "user",
-                            content: [
-                                {
-                                    type: "file",
-                                    file_url: {
-                                        url: base64Data,
-                                    }
-                                },
-                                {
-                                    type: "text",
-                                    text: query || "文档里说了什么？",
-                                }
-                            ],
-                        },
-                    ],
-                }),
-                timeout: 500000
-            });
-            const respContent = (await completion.json());
-            await this.markdownRender(e, query || "文档里说了什么？", respContent.choices[0].message.content);
+            const completion = await this.fetchKimiRequest(query || "文档里说了什么？", "file", base64Data);
+            await this.markdownRender(e, query || "文档里说了什么？", completion);
         }, 1000)
         return true;
+    }
+
+    async fetchKimiRequest(query, contentType = "text", contentData = null) {
+        // 定义通用的消息内容
+        let content;
+
+        switch (contentType) {
+            case 'image':
+                content = {
+                    role: "user",
+                    content: [
+                        {
+                            type: "image_url",
+                            image_url: {
+                                url: contentData,
+                            }
+                        },
+                        {
+                            type: "text",
+                            text: query || "图片中有什么？",
+                        }
+                    ]
+                };
+                break;
+            case 'file':
+                content = {
+                    role: "user",
+                    content: [
+                        {
+                            type: "file",
+                            file_url: {
+                                url: contentData,
+                            }
+                        },
+                        {
+                            type: "text",
+                            text: query || "文档里说了什么？",
+                        }
+                    ]
+                };
+                break;
+            default:
+                content = {
+                    role: "user",
+                    content: query
+                }
+        }
+
+        // 发起请求
+        const completion = await fetch(`${ this.baseURL }/v1/chat/completions`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({
+                model: this.aiModel,
+                messages: [content],
+            }),
+            timeout: 500000
+        });
+
+        return (await completion.json()).choices[0].message.content;
     }
 }
 
@@ -416,14 +390,14 @@ const renderHTML = (e, query, aiContent) => {
         </div>
         <div class="message user-message">
             <div class="message-content">
-                <p>${ query }</p>
+                <p>${query}</p>
             </div>
-            <img src="http://q1.qlogo.cn/g?b=qq&nk=${ e.user_id }&s=100" alt="User Avatar" class="avatar">
+            <img src="http://q1.qlogo.cn/g?b=qq&nk=${e.user_id}&s=100" alt="User Avatar" class="avatar">
         </div>
         <div class="message ai-message">
             <img src="https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/kimi/kimi.png" alt="AI Avatar" class="avatar">
             <div class="message-content">
-                <div id="ai-content">${ marked.parse(aiContent) }</div>
+                <div id="ai-content">${marked.parse(aiContent)}</div>
             </div>
         </div>
     </div>
@@ -440,7 +414,7 @@ async function toBase64(filePath) {
     try {
         const fileData = await fs.promises.readFile(filePath);
         const base64Data = fileData.toString('base64');
-        return `data:${ getMimeType(filePath) };base64,${ base64Data }`;
+        return `data:${getMimeType(filePath)};base64,${base64Data}`;
     } catch (error) {
         logger.info(error);
     }
