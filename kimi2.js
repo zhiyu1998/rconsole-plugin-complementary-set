@@ -33,6 +33,8 @@ export class kimiJS extends plugin {
             "Content-Type": "application/json",
             "Authorization": "Bearer " + this.toolsConfig.aiApiKey
         };
+        // 模型参数
+        this.aiModel = this.toolsConfig.aiModel;
     }
 
     /**
@@ -180,7 +182,7 @@ export class kimiJS extends plugin {
             method: 'POST',
             headers: this.headers,
             body: JSON.stringify({
-                model: "moonshot-v1-8k",
+                model: this.aiModel,
                 messages: [
                     {
                         "role": "system",
@@ -245,7 +247,7 @@ export class kimiJS extends plugin {
                 method: 'POST',
                 headers: this.headers,
                 body: JSON.stringify({
-                    model: "moonshot-v1-auto",
+                    model: this.aiModel,
                     messages: [
                         {
                             role: "user",
@@ -305,7 +307,7 @@ export class kimiJS extends plugin {
                 method: 'POST',
                 headers: this.headers,
                 body: JSON.stringify({
-                    model: "moonshot-v1-auto",
+                    model: this.aiModel,
                     messages: [
                         {
                             role: "user",
