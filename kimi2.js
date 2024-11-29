@@ -5,9 +5,6 @@ import path from "path";
 import puppeteer from "../../../lib/puppeteer/puppeteer.js";
 import config from "../model/config.js";
 
-// 存储pdf、png位置
-const kimiFilePath = "./data/kimiImgTmp.pdf";
-let kimiImgPath = "./data/kimiImgTmp.png";
 // 搜索聊天记录阈值，建议5~10
 const SEARCH_THRESHOLD = 10;
 
@@ -73,54 +70,6 @@ export class kimiJS extends plugin {
         }
     }
 
-    async getLatestImage(e) {
-        // 获取最新的聊天记录，阈值为5
-        const latestChat = await e.bot.sendApi("get_group_msg_history", {
-            "group_id": e.group_id,
-            "count": SEARCH_THRESHOLD
-        });
-        const messages = latestChat.data.messages;
-        // 找到最新的图片
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const message = messages?.[i]?.message;
-            if (message?.[0]?.type === "image") {
-                return message?.[0].data?.url;
-            }
-        }
-        return "";
-    }
-
-    /**
-     * 获取最新的文档
-     * @param e
-     * @returns {Promise<*|string>}
-     */
-    async getLatestDocument(e) {
-        // 获取最新的聊天记录，阈值为5
-        const latestChat = await e.bot.sendApi("get_group_msg_history", {
-            "group_id": e.group_id,
-            "count": SEARCH_THRESHOLD
-        });
-        const messages = latestChat.data.messages;
-        let file_id = "";
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const message = messages?.[i]?.message;
-            if (message?.[0]?.type === "file") {
-                file_id = message?.[0].data?.file_id;
-                break;
-            }
-        }
-        if (file_id === "") {
-            return "";
-        }
-        // 获取文件信息
-        const latestFileUrl = await e.bot.sendApi("get_group_file_url", {
-            "group_id": e.group_id,
-            "file_id": file_id
-        });
-        return latestFileUrl.data.url;
-    }
-
     async markdownRender(e, query, aiContent) {
         // 打开一个新的页面
         const browser = await puppeteer.browserInit();
@@ -167,84 +116,88 @@ export class kimiJS extends plugin {
             })))
     }
 
+    async getReplyMsg(e) {
+        const msgList = await e.bot.sendApi("get_group_msg_history", {
+            "group_id": e.group_id,
+            "count": 1
+        });
+        let msgId = msgList.data.messages[0]?.message[0]?.data.id
+        let msg = await e.bot.sendApi("get_msg",{
+            "message_id" : msgId
+        })
+        return msg.data
+    }
+
+    async extractFileExtension(filename) {
+        // 使用正则表达式匹配文件名后缀
+        const match = filename.match(/\.([a-zA-Z0-9]+)$/);
+        return match ? match[1] : null;
+    }
+
+    /**
+     * 自动获取文件的地址、后缀
+     * @param e
+     * @returns {Promise<*|string>}
+     */
+    async autoGetUrl(e) {
+        if (e?.reply_id !== undefined) {
+            let url, fileType;
+            e.reply("正在上传引用图片，请稍候...", true);
+            const replyMsg = await this.getReplyMsg(e);
+            const message = replyMsg?.message;
+            fileType = message?.[0]?.type;
+            // 图片
+            if (fileType === "image") {
+                url = message?.[0]?.data?.url;
+            } else {
+                // 其他文件
+                const file_id = message?.[0]?.data?.file_id;
+                // 获取文件信息
+                const latestFileUrl = await e.bot.sendApi("get_group_file_url", {
+                    "group_id": e.group_id,
+                    "file_id": file_id
+                });
+                url = latestFileUrl.data.url;
+            }
+            return {
+                url: url,
+                fileExt: await this.extractFileExtension(message?.[0]?.data?.file_id),
+                fileType
+            }
+        }
+        return {
+            url: "",
+            fileExt: "",
+            fileType: ""
+        }
+    }
+
     async chat(e) {
         const query = e.msg.replace(/^#[Kk][Ii][Mm][Ii]/, '').trim();
-        // 文档处理
-        if (query.startsWith("d") || query.startsWith("D")) {
-            await this.document(e);
-            return true;
-        } else if (query.startsWith("p") || query.startsWith("P")) {
-            await this.image(e);
+        // 自动判断是否有引用文件和图片
+        const { url, fileExt, fileType } = await this.autoGetUrl(e);
+        if (url !== "") {
+            const downloadFileName = path.resolve(`./data/tmp.${ fileExt }`);
+            let defaultQuery = "";
+            if (fileType === "image") {
+                await this.downloadImage(url, downloadFileName);
+                defaultQuery = "图片中有什么？";
+            } else {
+                // file类型
+                await this.downloadFile(url, downloadFileName);
+                defaultQuery = "文件中有什么？";
+            }
+            setTimeout(async () => {
+                const base64Data = await toBase64(downloadFileName);
+                // 发送请求
+                const completion = await this.fetchKimiRequest(query || defaultQuery, "file", base64Data);
+                await this.markdownRender(e, query || defaultQuery, completion);
+            }, 1000)
             return true;
         }
         // 请求Kimi
         const completion = await this.fetchKimiRequest(query);
         await this.markdownRender(e, query, completion);
-        return true;
-    }
-
-    async image(e) {
-        const query = e.msg.replace(/^#[Kk][Ii][Mm][Ii][Pp]/, '').trim();
-        let url;
-        if (e?.reply_id !== undefined) {
-            e.reply("正在上传引用图片，请稍候...", true);
-            const replyMsg = await e.getReply();
-            const message = replyMsg?.message;
-            url = message?.[0]?.url;
-        } else {
-            e.reply("正在获取聊天最新的图片，请稍候...", true);
-            url = await this.getLatestImage(e);
-            if (url === "") {
-                e.reply("没有找到聊天最新的图片", true);
-                return false;
-            }
-        }
-        logger.info(url);
-        // 下载图片
-        kimiImgPath = path.resolve(kimiImgPath);
-        await this.downloadImage(url, kimiImgPath);
-        setTimeout(async () => {
-            // 转换为base64
-            const base64 = await toBase64(kimiImgPath);
-            // 发送请求
-            const completion = await this.fetchKimiRequest(query || "图片中有什么？", "image", base64);
-            await this.markdownRender(e, query || "图片中有什么？", completion);
-        }, 1000);
-
-        return true;
-    }
-
-    async document(e) {
-        const query = e.msg.replace(/^#[Kk][Ii][Mm][Ii][Dd]/, '').trim();
-        let url;
-        if (e?.reply_id !== undefined) {
-            e.reply("正在上传引用文档，请稍候...", true);
-            const replyMsg = await e.getReply();
-            const message = replyMsg?.message;
-            const file_id = message?.[0]?.file_id;
-            // 获取文件信息
-            const latestFileUrl = await e.bot.sendApi("get_group_file_url", {
-                "group_id": e.group_id,
-                "file_id": file_id
-            });
-            url = latestFileUrl.data.url;
-        } else {
-            e.reply("正在获取聊天最新的文档文件，请稍候...", true);
-            url = await this.getLatestDocument(e);
-            if (url === "") {
-                e.reply("没有找到聊天最新的文档文件", true);
-                return false;
-            }
-        }
-        url += "demo.pdf";
-        // 下载pdf并转换成base64
-        await this.downloadFile(url, kimiFilePath);
-        const base64Data = await toBase64(kimiFilePath);
-        setTimeout(async () => {
-            // 发送请求
-            const completion = await this.fetchKimiRequest(query || "文档里说了什么？", "file", base64Data);
-            await this.markdownRender(e, query || "文档里说了什么？", completion);
-        }, 1000)
         return true;
     }
 
