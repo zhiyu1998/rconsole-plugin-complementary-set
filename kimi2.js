@@ -178,7 +178,7 @@ export class kimiJS extends plugin {
             return true;
         }
         // 请求Kimi
-        const completion = await fetch(query);
+        const completion = await this.fetchKimiRequest(query);
         await this.markdownRender(e, query, completion);
         return true;
     }
