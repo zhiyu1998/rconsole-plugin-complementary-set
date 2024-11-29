@@ -245,9 +245,27 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/whats-talk.js > plugins/rconsole-plugin/apps/whats-talk.js
 ```
 
+或者，使用 gemini 的版本
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/whats-talk-gemini.js  > plugins/rconsole-plugin/apps/whats-talk.js
+```
+
+如果使用了 gemini 版本，填写 [API Key](https://aistudio.google.com/app/apikey?) 到 JS 文件里
+
+```javascript
+aiApiKey = “”
+```
+
 2. 发送 `#他们在聊什么`
 
 ![PixPin_2024-11-26_14-11-38.png](https://s2.loli.net/2024/11/26/cnyeHf7T1iR2zSl.png)
+
+3. 【非必要】设定推送的群
+
+```javascript
+const groupList = []; // 填到这里
+```
 
 ## 多模态识别 - Gemini （重构于群友 Chino 的 Gemini.js）
 
