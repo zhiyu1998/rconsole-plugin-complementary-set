@@ -16,7 +16,7 @@ const model = "moonshot-v1-auto"
 export class WhatsTalk extends plugin {
     constructor() {
         super({
-            name: "他们在聊什么",
+            name: "[R插件补集]他们在聊什么",
             dsc: "通过获取聊天记录再AI总结得到群友最近在聊什么话题",
             event: "message",
             priority: 5000,

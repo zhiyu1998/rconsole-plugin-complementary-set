@@ -11,7 +11,7 @@ const recallUsers = loadArrayFromFile(recallObjsPath);
 export class BatchRecall extends plugin {
     constructor() {
         super({
-            name: "批量撤回",
+            name: "[R插件补集]批量撤回",
             dsc: "批量撤回以及指定某个用户撤回",
             event: "message",
             priority: 5000,

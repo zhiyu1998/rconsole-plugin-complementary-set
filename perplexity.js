@@ -1,7 +1,7 @@
 export class PerplexityJS extends plugin {
     constructor() {
         super({
-            name: 'Perplexity AI',
+            name: '[R插件补集]Perplexity AI',
             dsc: 'Perplexity AI Assistant',
             event: 'message',
             priority: 1,

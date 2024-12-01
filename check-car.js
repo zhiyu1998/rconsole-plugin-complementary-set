@@ -9,7 +9,7 @@ const setimetu = 60  //消息撤回时间
 export class checkCar extends plugin {
     constructor() {
         super({
-            name: '验车',
+            name: '[R插件补集]验车',
             dsc: '验车',
             event: 'message',
             priority: -100,

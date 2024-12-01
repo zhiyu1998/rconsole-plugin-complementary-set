@@ -14,7 +14,7 @@ const NAPCAT_HTTP_URL = 'http://localhost:2537/send_like';
 export class thumbsUp extends plugin {
     constructor() {
         super({
-            name: "橘之点赞",
+            name: "[R插件补集]橘之点赞",
             dsc: "通过http进行点赞",
             event: "message",
             priority: 5000,

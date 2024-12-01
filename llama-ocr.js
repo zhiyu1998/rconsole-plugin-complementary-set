@@ -14,7 +14,7 @@ const SEARCH_THRESHOLD = 10;
 export class LlamaOcr extends plugin {
     constructor() {
         super({
-            name: "LLama-OCR",
+            name: "[R插件补集]LLama-OCR",
             dsc: "使用 Together AI的免费 Llama 3.2 端点来解析图像并返回 markdown",
             event: "message",
             priority: 5000,

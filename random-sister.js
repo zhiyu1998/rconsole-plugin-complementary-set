@@ -4,7 +4,7 @@ import plugin from '../../lib/plugins/plugin.js'
 export class example extends plugin {
   constructor () {
     super({
-      name: '小姐姐视频',
+      name: '[R插件补集]小姐姐视频',
       dsc: '发送随机小姐姐视频',
       // 匹配的消息类型，参考https://oicqjs.github.io/oicq/#events
       event: 'message',

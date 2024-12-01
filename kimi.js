@@ -3,7 +3,7 @@ import config from "../model/config.js";
 export class kimiJS extends plugin {
     constructor() {
         super({
-            name: 'Moonshot AI',
+            name: '[R插件补集]Moonshot AI',
             dsc: 'Moonshot AI Assistant',
             event: 'message',
             priority: 1,

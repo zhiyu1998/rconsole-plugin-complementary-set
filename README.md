@@ -2,10 +2,9 @@
 
 ## 状态
 
-- ✅ kimi.js 
-- ✅ kimi2.js 
+- ✅ kimi.js
+- ✅ kimi2.js
 - ✅ check-car.js （由[Mix](https://github.com/MiX1024)提供）
-- ✅ 谁艾特我
 - ✅ 链接截图
 - ✅ 使用http解决ncqq点赞插件
 - ⚠️ 一些语音包（不稳定）
@@ -15,7 +14,7 @@
 - ✅ LLama OCR
 - ⚠️ Perplexity AI Proxy（🪜不好可能存在不稳定现象）
 - ✅ 他们在聊什么？
-- ✅ 多模态识别 - Gemini（重构于群友 Chino 的 Gemini.js）
+- ✅ 多模态识别 - Gemini
 
 ## kimi.js 使用指南
 
@@ -25,7 +24,7 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 ```
 
 2. 准备环境
-如果没有安装 `Docker` 以及组件的话可以按照[文档](https://gitee.com/kyrzy0416/rconsole-plugin#%E5%BE%AE%E4%BF%A1%E6%96%87%E7%AB%A0%E6%80%BB%E7%BB%93-%E5%AE%8C%E5%85%A8%E5%85%8D%E8%B4%B9%E6%80%BB%E7%BB%93)进行安装，需要补充以下内容到`R插件`：
+   如果没有安装 `Docker` 以及组件的话可以按照[文档](https://gitee.com/kyrzy0416/rconsole-plugin#%E5%BE%AE%E4%BF%A1%E6%96%87%E7%AB%A0%E6%80%BB%E7%BB%93-%E5%AE%8C%E5%85%A8%E5%85%8D%E8%B4%B9%E6%80%BB%E7%BB%93)进行安装，需要补充以下内容到`R插件`：
 ```yaml
 aiBaseURL: '' # 用于识图的接口，kimi默认接口为：https://api.moonshot.cn，其他服务商自己填写
 aiApiKey: '' # 用于识图的api key，kimi接口申请：https://platform.moonshot.cn/console/api-keys
@@ -78,16 +77,6 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 4. 使用示例：
 
 ![img.png](img/img2.webp)
-
-## 谁艾特我
-
-群里有时候要处理群友提出的 bug 就会找At 之前这个脚本没有进行排序, 要拉到最底下, 现在做了排序第一个就是最新的
-
-```shell
-curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/who-at-me.js > plugins/rconsole-plugin/apps/who-at-me.js
-```
-
-![img.png](img/img3.webp)
 
 ## 链接截图（群内小伙伴提的需求，说某插件的截图不好用）
 
@@ -149,7 +138,7 @@ const voiceList = Object.freeze([
 ```
 
 3. 开始游玩
-![img.png](img/img7.webp)
+   ![img.png](img/img7.webp)
 
 ## NCQQ 3.4.6 以上快捷语音包
 
@@ -220,9 +209,9 @@ const TOGETHER_API_KEY = "";
 ## Perplexity AI Proxy
 
 > 驱动来自：https://github.com/Archeb/pplx-proxy
-> 
+>
 > ⚠️ 已知问题：付费用户（已购买 pro）无法使用pro进行搜索，免费用户倒是不影响
-> 
+>
 > 🔥 仅供个人部署用于访问自己合法取得的订阅，严禁用于转售或其他商业用途。不提供任何技术支持、不为任何违规使用导致的封号负责。
 
 1. 搭建方法：
@@ -245,29 +234,11 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/whats-talk.js > plugins/rconsole-plugin/apps/whats-talk.js
 ```
 
-或者，使用 gemini 的版本
-
-```shell
-curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/whats-talk-gemini.js  > plugins/rconsole-plugin/apps/whats-talk.js
-```
-
-如果使用了 gemini 版本，填写 [API Key](https://aistudio.google.com/app/apikey?) 到 JS 文件里
-
-```javascript
-aiApiKey = “”
-```
-
 2. 发送 `#他们在聊什么`
 
 ![PixPin_2024-11-26_14-11-38.png](https://s2.loli.net/2024/11/26/cnyeHf7T1iR2zSl.png)
 
-3. 【非必要】设定推送的群
-
-```javascript
-const groupList = []; // 填到这里
-```
-
-## 多模态识别 - Gemini （重构于群友 Chino 的 Gemini.js）
+## 多模态识别 - Gemini
 
 1. 去 Google studio 获取一个 [API Key](https://aistudio.google.com/app/apikey?)
 

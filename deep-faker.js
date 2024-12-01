@@ -75,7 +75,7 @@ const voiceList = Object.freeze([
 export class example extends plugin {
     constructor () {
         super({
-            name: '语音包',
+            name: '[R插件补集]语音包',
             dsc: '语音包',
             // 匹配的消息类型，参考https://oicqjs.github.io/oicq/#events
             event: 'message',

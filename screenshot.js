@@ -9,7 +9,7 @@ let fullScreen = false;
 export class Screenshot extends plugin {
     constructor() {
         super({
-            name: "http截图",
+            name: "[R插件补集]http截图",
             dsc: "http截图",
             /** https://oicqjs.github.io/oicq/#events */
             event: "message",

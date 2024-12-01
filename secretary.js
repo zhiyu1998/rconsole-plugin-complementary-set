@@ -18,7 +18,7 @@ let todoList = {}
 export class Secretary extends plugin {
     constructor() {
         super({
-            name: "小秘书",
+            name: "[R插件补集]小秘书",
             dsc: "让机器人抵挡at，然后制作成 TODO 后续统一处理",
             event: "message",
             priority: 9999,
