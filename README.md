@@ -244,8 +244,16 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 
 2. 克隆到 R 插件
 
+- 这个版本由 @Chino 维护
+
 ```shell
 curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/gemini.js > plugins/rconsole-plugin/apps/gemini.js
+```
+
+- 这个版本主要由 @zhiyu1998 位数
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/gemini-base64.js > plugins/rconsole-plugin/apps/gemini.js
 ```
 
 3. 填写 API Key
