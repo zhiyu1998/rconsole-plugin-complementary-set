@@ -15,6 +15,7 @@
 - ⚠️ Perplexity AI Proxy（🪜不好可能存在不稳定现象）
 - ✅ 他们在聊什么？
 - ✅ 多模态识别 - Gemini
+- ✅ 开前缀/at
 
 ## kimi.js 使用指南
 
@@ -281,6 +282,14 @@ pnpm add @google/generative-ai -w
 5. 启动，开始游玩
 
 ![PixPin_2024-11-29_19-56-34.png](https://s2.loli.net/2024/11/29/JED4gQmY3l6bLCF.png)
+
+## 开前缀/at
+
+防止打扰到其他群聊的 I 人插件
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/openAt.js > plugins/example/openAt.js
+```
 
 ## 声明
 
