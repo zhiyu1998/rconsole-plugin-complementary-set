@@ -244,13 +244,13 @@ curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/mas
 
 2. 克隆到 R 插件
 
-- 这个版本由 @Chino 维护
+- 这个版本由 [@Chino](https://github.com/J-Chino) 维护
 
 ```shell
 curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/gemini.js > plugins/rconsole-plugin/apps/gemini.js
 ```
 
-- 这个版本主要由 @zhiyu1998 位数
+- 这个版本主要由 [@zhiyu1998](https://github.com/zhiyu1998) 维护
 
 ```shell
 curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/gemini-base64.js > plugins/rconsole-plugin/apps/gemini.js
