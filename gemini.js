@@ -1,4 +1,4 @@
-/** 
+/**
 20241201更新：
 使用File API代替base64上传文件
 新增#gemini帮助指令
@@ -85,7 +85,7 @@ export class Gemini extends plugin {
             fnc: 'grounding'
         }
     ]
-    }); 
+    });
     this.genAI = new GoogleGenerativeAI(aiApiKey);
     this.fileManager = new GoogleAIFileManager(aiApiKey);
     console.log('Gemini插件已初始化');
@@ -96,7 +96,7 @@ export class Gemini extends plugin {
   async gemiHelp(e) {
     await e.reply(helpContent, true);
   }
-  
+
   // 图片下载
   async downloadImage(url, imgPath) {
     try {
@@ -214,27 +214,38 @@ export class Gemini extends plugin {
                 await this.downloadFile(url, downloadFileName);
                 defaultQuery = "请描述一下这个文件里的内容";
             }
-            
+
             // 初始化 model
             const geminiModel = this.genAI.getGenerativeModel({ model: model });
-                
+
             setTimeout(async () => {
                 try {
                     const uploadResponse = await this.fileManager.uploadFile(downloadFileName, {
                         mimeType: getMimeType(downloadFileName),
-                        displayName: `document_${Date.now()}`
+                        displayName: `file_${Date.now()}`
                     });
-                    
-                    console.log(
-                      `Uploaded file ${uploadResponse.file.displayName} as: ${uploadResponse.file.uri}`,
+
+                    logger.info(
+                      `[R插件扩展][Gemini]上传文件： ${uploadResponse.file.displayName} as: ${uploadResponse.file.uri}`,
                     );
+
+                    // 等待视频处理完成
+                    let file = await this.fileManager.getFile(uploadResponse.file.name);
+                    while (file.state === FileState.PROCESSING) {
+                        await new Promise(resolve => setTimeout(resolve, 10000));
+                        file = await this.fileManager.getFile(uploadResponse.file.name);
+                    }
+
+                    if (file.state === FileState.FAILED || file.state !== FileState.ACTIVE) {
+                        throw new Error("视频处理失败，请稍后重试");
+                    }
 
                     const result = await geminiModel.generateContent([
                         prompt,
                         {
                             fileData: {
                                 mimeType: getMimeType(downloadFileName),
-                                fileUri: uploadResponse.file.uri
+                                fileUri: file.uri
                             }
                         },
                         { text: query || defaultQuery }
