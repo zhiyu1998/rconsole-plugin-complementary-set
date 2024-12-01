@@ -79,23 +79,30 @@ export class WhatsTalkGemini extends plugin {
         }
         logger.info('[群友在聊什么]推送中...');
         for (let i = 0; i < groupList.length; i++) {
-            // 告知当前群要推送了
-            await Bot.sendApi("send_group_msg", {
-                "group_id": groupList[i],
-                "message": "正在推送群友正在聊的内容...",
-            })
-            // 推送过程
-            const messages = await this.getHistoryChat(null, groupList[i]);
-            const content = await this.chat(messages);
-            const forwardMsg = [content].map(item => {
-                return {
-                    message: { type: "text", text: item },
-                    nickname: Bot.info.nickname,
-                    user_id: Bot.info.user_id,
-                };
-            })
-            await Bot.pickGroup(groupList[i]).sendMsg(Bot.makeForwardMsg(forwardMsg));
-            await this.sleep(2000);
+            try {
+                // 告知当前群要推送了
+                await Bot.sendApi("send_group_msg", {
+                    "group_id": groupList[i],
+                    "message": "正在推送群友正在聊的内容...",
+                });
+
+                // 推送过程
+                const messages = await this.getHistoryChat(null, groupList[i]);
+                const content = await this.chat(messages);
+                const forwardMsg = [content].map(item => {
+                    return {
+                        message: { type: "text", text: item },
+                        nickname: Bot.info.nickname,
+                        user_id: Bot.info.user_id,
+                    };
+                });
+                await Bot.pickGroup(groupList[i]).sendMsg(Bot.makeForwardMsg(forwardMsg));
+                await this.sleep(2000);
+            } catch (error) {
+                logger.error(`处理群 ${groupList[i]} 时发生错误:`, error);
+                // 跳过当前迭代，继续下一个群的推送
+                // continue;
+            }
         }
     }
 
