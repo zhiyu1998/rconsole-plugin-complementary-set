@@ -20,7 +20,7 @@ const model = "gemini-1.5-flash";
 
 const helpContent = `指令：
 (1) 多模态助手：[引用文件(可选)] + #gemini + [问题(可选)]
-(2) 接地搜索(测试中，免费API无法使用)：#geminig + [问题]
+(2) 接地搜索(测试中，免费API无法使用)：#gemini搜索 + [问题]
 
 支持引用的文件格式有：
   // 音频
@@ -73,18 +73,18 @@ export class Gemini extends plugin {
       priority: 1,
       rule: [
         {
-            reg: '^#gemini帮助\\s*.*$',
-            fnc: 'gemiHelp'
-        },
-        {
-            reg: '^#gemini\\s*.*$',
+            reg: '^#gemini(?!搜索|帮助)\\s*.*$',  // 使用否定前瞻(?!pattern)
             fnc: 'chat'
         },
         {
-            reg: '^#geminig\\s*.*$',
+            reg: '^#gemini搜索\\s*.*$',
             fnc: 'grounding'
+        },
+        {
+            reg: '^#gemini帮助\\s*.*$',
+            fnc: 'gemiHelp'
         }
-    ]
+    ],
     });
     this.genAI = new GoogleGenerativeAI(aiApiKey);
     this.fileManager = new GoogleAIFileManager(aiApiKey);
@@ -275,7 +275,7 @@ export class Gemini extends plugin {
 
   //文本搜索功能
   async grounding(e) {
-    const query = e.msg.replace(/^#geminig/, '').trim();
+    const query = e.msg.replace(/^#gemini搜索/, '').trim();
 
     if (!query) {
       await e.reply('请输入有效的问题。', true);
@@ -283,9 +283,9 @@ export class Gemini extends plugin {
     }
 
     try {
-      const model = genAI.getGenerativeModel(
+      const geminiModelodel = this.genAI.getGenerativeModel(
         {
-          model: modelName,
+          model: model,
           tools: [
             {
               googleSearchRetrieval: {
@@ -300,7 +300,7 @@ export class Gemini extends plugin {
         { apiVersion: "v1beta" },
       );
 
-      const result = await model.generateContent([query]);
+      const result = await geminiModelodel.generateContent([prompt + query]);
 
       if (result?.response?.candidates?.[0]) {
         // 提取文本内容
@@ -398,5 +398,4 @@ function getMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   return mimeTypes[ext] || 'application/octet-stream';
 }
-
 
