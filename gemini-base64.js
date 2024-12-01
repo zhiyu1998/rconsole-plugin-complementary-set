@@ -12,7 +12,7 @@ const model = "gemini-1.5-flash";
 export class Gemini extends plugin {
     constructor() {
         super({
-            name: '谷歌 Gemini',
+            name: '[R插件补集]谷歌 Gemini',
             dsc: '谷歌 Gemini 多模态助手',
             event: 'message',
             priority: 1,
