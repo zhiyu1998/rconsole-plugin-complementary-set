@@ -283,6 +283,10 @@ pnpm add @google/generative-ai -w
 
 ![PixPin_2024-11-29_19-56-34.png](https://s2.loli.net/2024/11/29/JED4gQmY3l6bLCF.png)
 
+6. [拓展] 增加 Gemini 的联网能力
+
+> ➡️ [点击阅读](./crawler/README.md)
+
 ## 开前缀/at
 
 防止打扰到其他群聊的 I 人插件
