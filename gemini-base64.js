@@ -88,7 +88,7 @@ export class Gemini extends plugin {
     async autoGetUrl(e) {
         if (e?.reply_id !== undefined) {
             let url, fileType, fileExt;
-            e.reply("正在上传引用，请稍候...", true);
+            e.reply("正在上传引用，请稍候...", true, { recallMsg: 10 });
             const replyMsg = await this.getReplyMsg(e);
             const messages = replyMsg?.message; // 获取消息数组
 
