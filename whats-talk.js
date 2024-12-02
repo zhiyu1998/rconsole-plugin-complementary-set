@@ -5,7 +5,7 @@ const PUSH_CRON = "0 8-20 * * *";
 // 挖掘的历史消息
 const HISTORY_LENS = 200;
 // 推送的群组
-const groupList = [''];
+const groupList = [];
 // ai 地址
 const aiBaseURL = "";
 // ai Key
