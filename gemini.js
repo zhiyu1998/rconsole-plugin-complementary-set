@@ -154,56 +154,70 @@ export class Gemini extends plugin {
   }
 
   // 获取文件地址和后缀
-  async autoGetUrl(e) {
-    if (e?.reply_id !== undefined) {
-      let url, fileType, fileExt;
-      e.reply("正在上传引用，请稍候...", true);
-      const replyMsg = await this.getReplyMsg(e);
-      const messages = replyMsg?.message;
-      if (Array.isArray(messages) && messages.length > 0) {
-        for (const msg of messages) {
-          fileType = msg.type;
-          if (fileType === "image") {
-            url = msg.data?.url;
-            fileExt = await this.extractFileExtension(msg.data?.file_id);
-            break;
-          } else if (fileType === "file") {
-            const file_id = msg.data?.file_id;
-            const latestFileUrl = await e.bot.sendApi("get_group_file_url", {
-              "group_id": e.group_id,
-              "file_id": file_id
-            });
-            url = latestFileUrl.data.url;
-            fileExt = await this.extractFileExtension(msg.data?.file_id);
-            break;
-          } else if (fileType === "video") {
-            url = msg.data?.path;
-            fileExt = await this.extractFileExtension(msg.data?.file_id);
-            break;
-          }
+    async autoGetUrl(e) {
+        if (e?.reply_id !== undefined) {
+            let url, fileType, fileExt;
+            e.reply("正在上传引用，请稍候...", true, { recallMsg: 10 });
+            const replyMsg = await this.getReplyMsg(e);
+            const messages = replyMsg?.message; // 获取消息数组
+
+            if (Array.isArray(messages) && messages.length > 0) {
+                // 遍历消息数组寻找第一个有用的元素
+                for (const msg of messages) {
+                    fileType = msg.type;
+
+                    if (fileType === "image") {
+                        // 如果是图片，直接获取URL
+                        url = msg.data?.url;
+                        fileExt = await this.extractFileExtension(msg.data?.file_id);
+                        break;
+                    } else if (fileType === "file") {
+                        // 如果是文件，获取文件信息
+                        const file_id = msg.data?.file_id;
+                        const latestFileUrl = await e.bot.sendApi("get_group_file_url", {
+                            "group_id": e.group_id,
+                            "file_id": file_id
+                        });
+                        url = latestFileUrl.data.url;
+                        fileExt = await this.extractFileExtension(msg.data?.file_id);
+                        break;
+                    } else if (fileType === "video") {
+                        // 如果是一个视频
+                        url = msg.data?.path;
+                        fileExt = await this.extractFileExtension(msg.data?.file_id);
+                        break;
+                    }
+                }
+            }
+
+            // 如果什么也匹配不到会返回：{ url: '', fileExt: undefined, fileType: 'text' }
+            if (url === undefined && fileType === 'text') {
+                // 获取文本数据到 url 变量
+                url = messages?.[0].data?.text || messages?.[1].data?.text;
+            }
+
+            return {
+                url: url || "",
+                fileExt: fileExt,
+                fileType: fileType || ""
+            };
         }
-      }
-      return {
-        url: url || "",
-        fileExt: fileExt,
-        fileType: fileType || ""
-      };
+
+        return {
+            url: "",
+            fileExt: "",
+            fileType: ""
+        };
     }
-    return {
-      url: "",
-      fileExt: "",
-      fileType: ""
-    };
-  }
 
   // 多模态功能
   async chat(e) {
     try {
-        const query = e.msg.replace(/^#gemini/, '').trim();
+        let query = e.msg.replace(/^#gemini/, '').trim();
         const { url, fileExt, fileType } = await this.autoGetUrl(e);
-        logger.info({ url, fileExt, fileType });
+        // logger.info({ url, fileExt, fileType });
 
-        if (url !== "") {
+        if (url !== "" && fileType !== "text") {
             const downloadFileName = path.resolve(`./data/tmp.${fileExt}`);
             let defaultQuery = "";
 
@@ -258,6 +272,11 @@ export class Gemini extends plugin {
             }, 1000);
 
             return true;
+        }
+
+        // 如果引用的是一个文本
+        if (fileType === "text") {
+            query += `引用："${url}"`;
         }
 
         // 纯文本对话
