@@ -3,7 +3,7 @@
 1. 在你的服务器上创建一个文件夹 && 放入 py 文件
 
 ```shell
-cd /home && mkdir crawler && cd crawler && curl -o https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/crawler/crawl.py
+cd /home && mkdir crawler && cd crawler && curl -O https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/crawler/crawl.py
 ```
 
 2. 安装依赖
