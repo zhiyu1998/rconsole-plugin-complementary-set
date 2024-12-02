@@ -31,7 +31,7 @@ playwright install-deps
 ```shell
 tmux new -s craw
 # 进入后
-flask --app main2 run --host=0.0.0.0
+flask --app crawl run --host=0.0.0.0
 ```
 
 4. 拉取最新的 `gemini-base64.js`，并填入你的 ip 地址，例如：`http://localhost:5000`
