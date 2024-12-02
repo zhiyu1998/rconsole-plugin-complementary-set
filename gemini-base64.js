@@ -121,6 +121,12 @@ export class Gemini extends plugin {
                 }
             }
 
+            // 如果什么也匹配不到会返回：{ url: '', fileExt: undefined, fileType: 'text' }
+            if (url === undefined && fileType === 'text') {
+                // 获取文本数据到 url 变量
+                url = messages?.[0].data?.text || messages?.[1].data?.text;
+            }
+
             return {
                 url: url || "",
                 fileExt: fileExt,
@@ -137,20 +143,20 @@ export class Gemini extends plugin {
 
 
     async chat(e) {
-        const query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]/, '').trim();
+        let query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]/, '').trim();
         // 自动判断是否有引用文件和图片
         const { url, fileExt, fileType } = await this.autoGetUrl(e);
-        logger.info({ url, fileExt, fileType })
-        if (url !== "") {
+        // logger.info({ url, fileExt, fileType })
+        // 如果链接不为空，并且引用的内容不是文本
+        if (url !== "" && fileType !== "text") {
             const downloadFileName = path.resolve(`./data/tmp.${ fileExt }`);
-            let defaultQuery = "";
+            // 默认如果什么也不发送的查询
+            let defaultQuery = "描述一下内容";
             if (fileType === "image") {
                 await this.downloadImage(url, downloadFileName);
-                defaultQuery = "图片中有什么？";
             } else {
                 // file类型
                 await this.downloadFile(url, downloadFileName);
-                defaultQuery = "文件中有什么？";
             }
             setTimeout(async () => {
                 // 发送请求
@@ -159,8 +165,12 @@ export class Gemini extends plugin {
             }, 1000);
             return true;
         }
+        // 如果引用的是一个文本
+        if (fileType === "text") {
+            query += `引用："${url}"`;
+        }
 
-        // 请求Kimi
+        // 请求 Gemini
         const completion = await this.fetchGeminiReq(query);
         await e.reply(completion, true);
         return true;
