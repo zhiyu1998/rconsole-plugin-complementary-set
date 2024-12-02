@@ -8,6 +8,8 @@ const prompt = "请用中文回答问题";
 const aiApiKey = "";
 // ai 模型
 const model = "gemini-1.5-flash";
+// 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000
+const llmCrawlBaseUrl = "";
 
 export class Gemini extends plugin {
     constructor() {
@@ -146,7 +148,7 @@ export class Gemini extends plugin {
         let query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]/, '').trim();
         // 自动判断是否有引用文件和图片
         const { url, fileExt, fileType } = await this.autoGetUrl(e);
-        // logger.info({ url, fileExt, fileType })
+        logger.info({ url, fileExt, fileType });
         // 如果链接不为空，并且引用的内容不是文本
         if (url !== "" && fileType !== "text") {
             const downloadFileName = path.resolve(`./data/tmp.${ fileExt }`);
@@ -167,13 +169,35 @@ export class Gemini extends plugin {
         }
         // 如果引用的是一个文本
         if (fileType === "text") {
-            query += `引用："${url}"`;
+            query += `引用："${ url }"`;
         }
+
+        // -- 下方可能返回的值为 { url: '', fileExt: '', fileType: '' }
+        // 判断是否包含 https 链接
+        query = await this.extendsSearchQuery(query);
 
         // 请求 Gemini
         const completion = await this.fetchGeminiReq(query);
         await e.reply(completion, true);
         return true;
+    }
+
+    /**
+     * 扩展弱搜索能力
+     * @param query
+     * @returns {Promise<*>}
+     */
+    async extendsSearchQuery(query) {
+        if (llmCrawlBaseUrl !== '' && isContainsUrl(query)) {
+            // 单纯包含了链接
+            const llmData = await this.fetchLLMCrawlReq(query);
+            query += `\n搜索结果：${ llmData }`;
+        } else if (query.trim().startsWith("搜索")) {
+            // 需要搜索
+            const llmData = await this.fetchLLMCrawlReq(`https://www.baidu.com/s?wd=${ query.replace("搜索", "") }`);
+            query += `\n搜索结果：${ llmData }`;
+        }
+        return query;
     }
 
     async fetchGeminiReq(query, contentType, contentData = null) {
@@ -193,6 +217,13 @@ export class Gemini extends plugin {
 
         // 返回生成的文本
         return result.response.text();
+    }
+
+    async fetchLLMCrawlReq(query) {
+        // 提取 http 链接
+        const reqUrl = extractUrls(query)?.[0];
+        const data = await fetch(`${ llmCrawlBaseUrl }/crawl?url=${ reqUrl }`).then(resp => resp.json());
+        return data.data;
     }
 }
 
@@ -286,3 +317,23 @@ const mimeTypes = {
     '.sh': 'application/x-shellscript'
 };
 
+
+/**
+ * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
+ * @param string
+ * @returns {boolean}
+ */
+function isContainsUrl(string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
+    return urlRegex.test(string);
+}
+
+/**
+ * 提取字符串中的链接
+ * @param string
+ * @returns {*|*[]}
+ */
+function extractUrls(string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
+}
