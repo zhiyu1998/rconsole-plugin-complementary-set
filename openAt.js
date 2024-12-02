@@ -10,7 +10,7 @@ const file = './config/config/group.yaml';
 export class OpenAt extends plugin {
     constructor() {
         super({
-            name: '开at',
+            name: '[R插件补集]开at',
             dsc: '控制机器人在指定群at开关',
             event: 'message',
             priority: 5000, // 指令优先级
