@@ -7,7 +7,11 @@ app = Flask(__name__)
 
 
 async def simple_crawl(url: str) -> CrawlResult:
-    async with AsyncWebCrawler(verbose=True) as crawler:
+    async with AsyncWebCrawler(
+            browser_type="webkit",
+            verbose=True,
+            headless=True,
+    ) as crawler:
         result = await crawler.arun(
             url=url,
             cach_mode=CacheMode.ENABLED,
