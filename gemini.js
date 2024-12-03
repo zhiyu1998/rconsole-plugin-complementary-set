@@ -17,6 +17,8 @@ const prompt = "请用中文回答问题";
 const aiApiKey = "";
 // Gemini 模型 (可修改)
 const model = "gemini-1.5-flash";
+// 每日 8 点 03 分自动清理临时文件
+const CLEAN_CRON = "3 8 * * *";
 
 const helpContent = `指令：
 (1) 多模态助手：[引用文件(可选)] + #gemini + [问题(可选)]
@@ -86,11 +88,57 @@ export class Gemini extends plugin {
         }
     ],
     });
+      this.task = {
+          cron: CLEAN_CRON,
+          name: 'Gemini-自动清理临时文件',
+          fnc: () => this.autoCleanTmp(),
+          log: false
+      };
     this.genAI = new GoogleGenerativeAI(aiApiKey);
     this.fileManager = new GoogleAIFileManager(aiApiKey);
     console.log('Gemini插件已初始化');
   }
 
+    /**
+     * 自动清理垃圾函数
+     * @returns {Promise<void>}
+     */
+    async autoCleanTmp() {
+        const fullPath = path.resolve("./data");
+
+        // 检查目录是否存在
+        if (!fs.existsSync(fullPath)) {
+            logger.error(`[R插件补集][Gemini自动清理临时文件] 目录不存在: ${fullPath}`);
+            return;
+        }
+
+        // 读取目录内容
+        fs.readdir(fullPath, (err, files) => {
+            if (err) {
+                logger.error(`[R插件补集][Gemini自动清理临时文件] 无法读取目录: ${fullPath}`, err);
+                return;
+            }
+
+            // 筛选以 prefix 开头的文件
+            const tmpFiles = files.filter(file => file.startsWith("tmp"));
+
+            // 删除筛选到的文件
+            tmpFiles.forEach(file => {
+                const filePath = path.join(fullPath, file);
+                fs.unlink(filePath, err => {
+                    if (err) {
+                        logger.error(`[R插件补集][Gemini自动清理临时文件] 删除文件失败: ${filePath}`, err);
+                    } else {
+                        logger.info(`[R插件补集][Gemini自动清理临时文件] 已删除: ${filePath}`);
+                    }
+                });
+            });
+
+            if (tmpFiles.length === 0) {
+                logger.info(`[R插件补集][Gemini自动清理临时文件] 暂时没有清理的文件。`);
+            }
+        });
+    }
 
   // gemini帮助
   async gemiHelp(e) {
