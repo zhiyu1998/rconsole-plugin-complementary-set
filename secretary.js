@@ -8,12 +8,18 @@ const queue = new PQueue({ concurrency: 20 });
 const masterId = "";
 // TODO 是否启动文字版的TODO，防止部分机子无法看到TODO
 let isText = false;
+// TODO 填写你发言后小秘书将在这个时间内不撤回群友发言，默认5分钟（5 x 60 x 1000ms）
+const atTime = 300000;
 
 // 会动态获取
 let masterName = "";
 // true-忙碌 false-随时找我
 let masterStatus = true;
 let todoList = {}
+// 发言定时器，不需要修改
+let myVariable = false;
+// 存储当前定时器的 ID
+let timerId = null;
 
 export class Secretary extends plugin {
     constructor() {
@@ -64,7 +70,12 @@ export class Secretary extends plugin {
             if (e.msg !== undefined && isAllEnglishWithPunctuation(e.msg)) {
                 await this.translate_en2zh(e);
             }
-            if (e.at !== masterId) {
+            // 如果发言人是主人，那么就重置时间
+            if (String(e.user_id) === masterId) {
+                resetTimer(atTime);
+            }
+            // 如果不是 at 主人就直接返回
+            if (e.at !== masterId || myVariable === true) {
                 return;
             }
             if (masterName === "") {
@@ -170,6 +181,27 @@ function isAllEnglishWithPunctuation(str) {
     const regex = /^[A-Za-z0-9\s.,;:'"()%\-–—!?‘’“”]+$/;
     // 检查字符串不是单独的问号
     return regex.test(str) && str !== '?';
+}
+
+// 启动或重置定时器
+function resetTimer(duration) {
+    // 如果有现存的定时器，先清除它
+    if (timerId !== null) {
+        clearTimeout(timerId);
+        logger.info('[小秘书] 计时器已重置');
+    }
+
+    // 设置变量为true，表示计时开始
+    myVariable = true;
+    logger.info(`[小秘书] 主人发言计时开始：${myVariable}`);
+
+    // 创建一个新的定时器
+    timerId = setTimeout(() => {
+        // 定时结束后将变量置为false
+        myVariable = false;
+        logger.info(`[小秘书] 主人发言计时结束：${myVariable}`);
+        timerId = null; // 定时器结束后清除ID
+    }, duration);
 }
 
 const renderHTML = (curGroupTodoList) => {
