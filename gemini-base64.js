@@ -12,6 +12,8 @@ const model = "gemini-1.5-flash";
 const llmCrawlBaseUrl = "";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
+// 临时存储消息id，请勿修改
+let tmpMsgQueue = [];
 
 export class Gemini extends plugin {
     constructor() {
@@ -78,38 +80,41 @@ export class Gemini extends plugin {
     }
 
     /**
-     * 图片下载
-     * @param url
-     * @param imgPath
-     * @returns {Promise<unknown | void>}
-     */
-    async downloadImage(url, imgPath) {
-        return axios({
-            url,
-            method: 'GET',
-            responseType: 'stream'
-        }).then(response => {
-            response.data.pipe(fs.createWriteStream(imgPath))
-                .on('finish', () => logger.info('图片下载完成，准备上传给Gemini'))
-                .on('error', err => logger.error('图片下载失败:', err.message));
-        }).catch(err => {
-            logger.error('图片地址访问失败:', err.message);
-        });
-    }
-
-    /**
-     * 文档下载
-     * @param url
-     * @param outputPath
+     * 通用文件下载函数
+     * @param {string} url - 文件的下载地址
+     * @param {string} outputPath - 文件保存路径
+     * @param {boolean} useStream - 是否使用流式写入（默认 false）
      * @returns {Promise<void>}
      */
-    async downloadFile(url, outputPath) {
+    async downloadFile(url, outputPath, useStream = false) {
         try {
-            const response = await axios.get(url, { responseType: 'arraybuffer' });
-            await fs.promises.writeFile(outputPath, response.data);
-            logger.info(`文件已成功下载至 ${ outputPath }`);
+            if (useStream) {
+                // 使用流式方式下载
+                const response = await axios({
+                    url,
+                    method: 'GET',
+                    responseType: 'stream',
+                });
+                await new Promise((resolve, reject) => {
+                    response.data
+                        .pipe(fs.createWriteStream(outputPath))
+                        .on('finish', () => {
+                            logger.info(`文件已成功流式下载至 ${outputPath}`);
+                            resolve();
+                        })
+                        .on('error', (err) => {
+                            logger.error('文件流下载失败:', err.message);
+                            reject(err);
+                        });
+                });
+            } else {
+                // 使用一次性写入方式下载
+                const response = await axios.get(url, { responseType: 'arraybuffer' });
+                await fs.promises.writeFile(outputPath, response.data);
+                logger.info(`文件已成功下载至 ${outputPath}`);
+            }
         } catch (error) {
-            logger.error('无法下载文件:', error);
+            logger.error('无法下载文件:', error.message);
         }
     }
 
@@ -139,9 +144,18 @@ export class Gemini extends plugin {
     async autoGetUrl(e) {
         if (e?.reply_id !== undefined) {
             let url, fileType, fileExt;
-            e.reply("正在上传引用，请稍候...", true, { recallMsg: 10 });
+            // 获取回复消息
             const replyMsg = await this.getReplyMsg(e);
-            const messages = replyMsg?.message; // 获取消息数组
+            // 交互告知用户等待
+            const tmpMsg = await e.reply("正在上传引用，请稍候...", true);
+            // 如果存在就暂时存放到队列
+            if (tmpMsg?.data?.message_id) {
+                tmpMsgQueue.push(tmpMsg.data.message_id);
+            }
+            // 获取消息数组
+            const messages = replyMsg?.message;
+
+            let replyMessages = [];
 
             if (Array.isArray(messages) && messages.length > 0) {
                 // 遍历消息数组寻找第一个有用的元素
@@ -152,7 +166,11 @@ export class Gemini extends plugin {
                         // 如果是图片，直接获取URL
                         url = msg.data?.url;
                         fileExt = await this.extractFileExtension(msg.data?.file_id);
-                        break;
+                        replyMessages.push({
+                            url,
+                            fileExt,
+                            fileType
+                        });
                     } else if (fileType === "file") {
                         // 如果是文件，获取文件信息
                         const file_id = msg.data?.file_id;
@@ -162,12 +180,20 @@ export class Gemini extends plugin {
                         });
                         url = latestFileUrl.data.url;
                         fileExt = await this.extractFileExtension(msg.data?.file_id);
-                        break;
+                        replyMessages.push({
+                            url,
+                            fileExt,
+                            fileType
+                        });
                     } else if (fileType === "video") {
                         // 如果是一个视频
                         url = msg.data?.path;
                         fileExt = await this.extractFileExtension(msg.data?.file_id);
-                        break;
+                        replyMessages.push({
+                            url,
+                            fileExt,
+                            fileType
+                        });
                     }
                 }
             }
@@ -176,49 +202,69 @@ export class Gemini extends plugin {
             if (url === undefined && fileType === 'text') {
                 // 获取文本数据到 url 变量
                 url = messages?.[0].data?.text || messages?.[1].data?.text;
+                replyMessages = [
+                    {
+                        url,
+                        fileExt: "",
+                        fileType
+                    }
+                ]
             }
 
-            return {
-                url: url || "",
-                fileExt: fileExt,
-                fileType: fileType || ""
-            };
+            return replyMessages;
         }
 
-        return {
+        return [{
             url: "",
             fileExt: "",
             fileType: ""
-        };
+        }];
     }
 
 
     async chat(e) {
         let query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]/, '').trim();
         // 自动判断是否有引用文件和图片
-        const { url, fileExt, fileType } = await this.autoGetUrl(e);
-        logger.info({ url, fileExt, fileType });
-        // 如果链接不为空，并且引用的内容不是文本
-        if (url !== "" && fileType !== "text") {
-            const downloadFileName = path.resolve(`./data/tmp.${ fileExt }`);
-            // 默认如果什么也不发送的查询
-            let defaultQuery = "描述一下内容";
-            if (fileType === "image") {
-                await this.downloadImage(url, downloadFileName);
-            } else {
-                // file类型
-                await this.downloadFile(url, downloadFileName);
+        const replyMessages = await this.autoGetUrl(e);
+
+        const collection = [];
+        for (let [index, replyItem] of replyMessages.entries()) {
+            const { url, fileExt, fileType } = replyItem;
+            // 如果链接不为空，并且引用的内容不是文本
+            if (url !== "" && fileType !== "text") {
+                const downloadFileName = path.resolve(`./data/tmp${index}.${ fileExt }`);
+                // 默认如果什么也不发送的查询
+                if (fileType === "image") {
+                    await this.downloadFile(url, downloadFileName, true);
+                } else {
+                    // file类型
+                    await this.downloadFile(url, downloadFileName, false);
+                }
+                collection.push(downloadFileName);
             }
-            setTimeout(async () => {
-                // 发送请求
-                const completion = await this.fetchGeminiReq(query || defaultQuery, getMimeType(downloadFileName), downloadFileName);
-                await e.reply(completion, true);
-            }, 1000);
-            return true;
         }
-        // 如果引用的是一个文本
-        if (fileType === "text") {
-            query += `引用："${ url }"`;
+
+        // 这里统一处理撤回消息，表示已经处理完成
+        if (tmpMsgQueue?.length > 0) {
+            for (const tmpMsgId of tmpMsgQueue) {
+                await e.bot.sendApi("delete_msg", {
+                    "message_id": tmpMsgId
+                });
+            }
+            tmpMsgQueue = [];
+        }
+
+        // 如果是有图像数据的
+        if (collection.length > 0) {
+            const defaultQuery = "描述一下内容";
+            const completion = await this.fetchGeminiReq(query || defaultQuery, collection);
+            await e.reply(completion, true);
+            return;
+        }
+
+        // 如果引用的仅是一个文本
+        if (replyMessages?.[0].fileType === "text") {
+            query += `\n引用："${ replyMessages?.[0].url }"`;
         }
 
         // -- 下方可能返回的值为 { url: '', fileExt: '', fileType: '' }
@@ -249,16 +295,24 @@ export class Gemini extends plugin {
         return query;
     }
 
-    async fetchGeminiReq(query, contentType, contentData = null) {
+    async fetchGeminiReq(query, contentData = []) {
         // 定义通用的消息内容
         const client = this.genAI.getGenerativeModel({ model: model });
 
         // 如果 query 是字符串，转换为数组
         const queryArray = Array.isArray(query) ? query : [{ text: query }];
 
+        // 挨个初始化
+        const geminiContentData = [];
+        if (contentData.length > 0) {
+            for (let i = 0; i < contentData.length; i++) {
+                geminiContentData.push(toGeminiInitData(contentData[i]));
+            }
+        }
+
         // 构建生成内容数组
-        const contentArray = contentData
-            ? [prompt, ...queryArray, toGeminiInitData(contentData)]
+        const contentArray = geminiContentData.length > 0
+            ? [prompt, ...queryArray, ...geminiContentData]
             : [prompt, ...queryArray];
 
         // 调用生成接口
