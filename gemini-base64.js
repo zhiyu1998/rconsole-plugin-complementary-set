@@ -398,13 +398,13 @@ const mimeTypes = {
     '.html': 'text/html',
     '.htm': 'text/html',
     '.css': 'text/css',
-    '.js': 'application/javascript', // 或 'text/javascript'
-    '.mjs': 'application/javascript',
+    '.js': 'text/javascript', // 或 'application/x-javascript'
+    '.mjs': 'text/javascript', // 或 'application/x-javascript'
     '.json': 'application/json',
-    '.md': 'text/markdown',
+    '.md': 'text/md',
     '.csv': 'text/csv',
     '.xml': 'text/xml',
-    '.rtf': 'application/rtf',
+    '.rtf': 'text/rtf',
     '.zip': 'application/zip',
     '.tar': 'application/x-tar',
     '.gz': 'application/gzip',
@@ -412,7 +412,7 @@ const mimeTypes = {
     '.7z': 'application/x-7z-compressed',
 
     // Programming languages
-    '.py': 'application/x-python',
+    '.py': 'text/x-python', // 或 'application/x-python'
     '.java': 'text/x-java-source',
     '.c': 'text/x-c',
     '.cpp': 'text/x-c++src',
