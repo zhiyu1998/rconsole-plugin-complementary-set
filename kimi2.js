@@ -111,7 +111,7 @@ export class kimiJS extends plugin {
                     user_id: e.user_id,
                 };
             })));
-        await page.close();
+        await browser.close();
     }
 
     async getReplyMsg(e) {

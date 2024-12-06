@@ -87,7 +87,7 @@ export class Screenshot extends plugin {
             quality: 70
         });
         await this.e.reply(segment.image(fs.readFileSync("./screenshot.png")));
-        await page.close();
+        await browser.close();
     }
 
     async sendScreenShot(link, fullPage = false) {
@@ -134,7 +134,7 @@ export class Screenshot extends plugin {
         });
 
         await this.e.reply(segment.image(fs.readFileSync("./screenshot.png")));
-        await page.close();
+        await browser.close();
     }
 }
 

@@ -171,7 +171,7 @@ export class Secretary extends plugin {
             quality: 50,
         });
         await e.reply(segment.image(fs.readFileSync("./todo.png")));
-        await page.close();
+        await browser.close();
     }
 
     async todoCls(e) {
