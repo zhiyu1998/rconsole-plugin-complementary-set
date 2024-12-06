@@ -11,26 +11,19 @@ export class Screenshot extends plugin {
         super({
             name: "[R插件补集]http截图",
             dsc: "http截图",
-            /** https://oicqjs.github.io/oicq/#events */
             event: "message",
             priority: 5000,
             rule: [
                 {
-                    /** 命令正则匹配 */
                     reg: "^http",
-                    /** 执行方法 */
                     fnc: "screenshot",
                 },
                 {
-                    /** 命令正则匹配 */
                     reg: "^截图切换$",
-                    /** 执行方法 */
                     fnc: "screenshotStatus",
                 },
                 {
-                    /** 命令正则匹配 */
                     reg: "^#gittr$",
-                    /** 执行方法 */
                     fnc: "githubTrending",
                 },
             ],
@@ -70,71 +63,87 @@ export class Screenshot extends plugin {
     }
 
     async sendNormalScreenShot(link) {
-        // 打开一个新的页面
-        const browser = await puppeteer.browserInit();
-        const page = await browser.newPage();
-        // 导航到你想要截图的URL
-        await page.goto(link);
-        logger.info(`开始截图...${ link }`);
-        // 设置截图的大小和视口尺寸
-        // await page.setViewport({ width: 1280, height: 800 });
-        // 截图并保存到文件
-        await page.screenshot({
-            path: './screenshot.png',
-            type: 'jpeg',
-            fullPage: true,
-            omitBackground: false,
-            quality: 70
-        });
-        await this.e.reply(segment.image(fs.readFileSync("./screenshot.png")));
-        await browser.close();
+        let browser = null;
+        try {
+            // 打开一个新的页面
+            browser = await puppeteer.browserInit();
+            const page = await browser.newPage();
+            // 导航到你想要截图的URL
+            await page.goto(link);
+            logger.info(`开始截图...${link}`);
+            // 设置截图的大小和视口尺寸
+            // await page.setViewport({ width: 1280, height: 800 });
+            // 截图并保存到文件
+            await page.screenshot({
+                path: './screenshot.png',
+                type: 'jpeg',
+                fullPage: true,
+                omitBackground: false,
+                quality: 70
+            });
+            await this.e.reply(segment.image(fs.readFileSync("./screenshot.png")));
+            await browser.close();
+        } catch (error) {
+            logger.error(`截图失败: ${error}`);
+            if (browser) {
+                await browser.close();
+            }
+        }
     }
 
     async sendScreenShot(link, fullPage = false) {
-        // 打开一个新的页面
-        const browser = await puppeteer.browserInit();
-        let page = await browser.newPage();
-        // 导航到你想要截图的URL
-        await page.goto(link);
-        logger.info(`开始截图...${link}`);
-        // 设置截图的大小和视口尺寸
-        await page.setViewport({ width: 1920, height: 1080 });
-        // 显式等待几秒
-        await this.delay(screenWaitTime * 1000);
-        // 截图并保存到文件
-        await page.screenshot({
-            path: "./screenshot.png",
-            type: "jpeg",
-            fullPage: fullPage,
-            omitBackground: false,
-            quality: 50,
-        });
+        let browser = null;
+        try {
+            // 打开一个新的页面
+            browser = await puppeteer.browserInit();
+            let page = await browser.newPage();
+            // 导航到你想要截图的URL
+            await page.goto(link);
+            logger.info(`开始截图...${link}`);
+            // 设置截图的大小和视口尺寸
+            await page.setViewport({ width: 1920, height: 1080 });
+            // 显式等待几秒
+            await this.delay(screenWaitTime * 1000);
+            // 截图并保存到文件
+            await page.screenshot({
+                path: "./screenshot.png",
+                type: "jpeg",
+                fullPage: fullPage,
+                omitBackground: false,
+                quality: 50,
+            });
 
-        const screenshotBase64 = fs.readFileSync("./screenshot.png", "base64");
-        // 生成包含 Base64 图片的 HTML
-        const htmlContent = screenRender(screenshotBase64);
-        await page.setViewport({
-            width: 1280,
-            height: 720,
-            deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
-        });
-        // 设置页面内容为包含 Base64 图片的 HTML
-        await page.setContent(htmlContent, {
-            waitUntil: "networkidle0",
-        });
-        // 获取页面上特定元素的位置和尺寸
-        const element = await page.$(".browser-window"); // 可以用CSS选择器选中你要截取的部分
-        // 直接截图该元素
-        await element.screenshot({
-            path: "./screenshot.png",
-            type: "jpeg",
-            fullPage: false,
-            omitBackground: false,
-            quality: 50,
-        });
+            const screenshotBase64 = fs.readFileSync("./screenshot.png", "base64");
+            // 生成包含 Base64 图片的 HTML
+            const htmlContent = screenRender(screenshotBase64);
+            await page.setViewport({
+                width: 1280,
+                height: 720,
+                deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
+            });
+            // 设置页面内容为包含 Base64 图片的 HTML
+            await page.setContent(htmlContent, {
+                waitUntil: "networkidle0",
+            });
+            // 获取页面上特定元素的位置和尺寸
+            const element = await page.$(".browser-window"); // 可以用CSS选择器选中你要截取的部分
+            // 直接截图该元素
+            await element.screenshot({
+                path: "./screenshot.png",
+                type: "jpeg",
+                fullPage: false,
+                omitBackground: false,
+                quality: 50,
+            });
 
-        await this.e.reply(segment.image(fs.readFileSync("./screenshot.png")));
-        await browser.close();
+            await this.e.reply(segment.image(fs.readFileSync("./screenshot.png")));
+            await browser.close();
+        } catch (error) {
+            logger.error(`截图失败: ${error}`);
+            if (browser) {
+                await browser.close();
+            }
+        }
     }
 }
 
@@ -208,7 +217,7 @@ function screenRender(screenshotBase64) {
                     <div class="maximize"></div>
                 </div>
             </div>
-            <img class="screenshot" src="data:image/png;base64,${ screenshotBase64 }" alt="Screenshot">
+            <img class="screenshot" src="data:image/png;base64,${screenshotBase64}" alt="Screenshot">
         </div>
 </div>
 

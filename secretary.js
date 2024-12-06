@@ -61,7 +61,7 @@ export class Secretary extends plugin {
                 'Content-Type': 'application/json'
             }
         }).then(resp => resp.text());
-        e.reply(`小秘书自动翻译：\n${ translateResultResp.split("翻译后：")?.[1] || "" }`, true);
+        e.reply(`小秘书自动翻译：\n${translateResultResp.split("翻译后：")?.[1] || ""}`, true);
     }
 
     // 互联网抽象话翻译
@@ -109,7 +109,7 @@ export class Secretary extends plugin {
                 await e.bot.sendApi("delete_msg", {
                     message_id: e.message_seq || e.message_id
                 });
-                e.reply(`👋 Hi，这里是${ masterName }的小秘书\n\n👨‍💻 ${ masterName }正在忙碌哦~~！\n\n忙完就会回复你了哟~！🤟😘`, true);
+                e.reply(`👋 Hi，这里是${masterName}的小秘书\n\n👨‍💻 ${masterName}正在忙碌哦~~！\n\n忙完就会回复你了哟~！🤟😘`, true);
             }
             const { user_id, nickname, card } = e.sender;
             const groupId = e.group_id;
@@ -121,7 +121,7 @@ export class Secretary extends plugin {
                 todoList[groupId][user_id] = [];
             }
             logger.info(todoList);
-            todoList[groupId][user_id].push(`${ card || nickname }：${ message || '' }`);
+            todoList[groupId][user_id].push(`${card || nickname}：${message || ''}`);
             logger.info(`[小秘书] 记录${user_id}到 TODO 完成`);
             return true;
         })
@@ -130,7 +130,7 @@ export class Secretary extends plugin {
     async switchStatus(e) {
         masterStatus = !masterStatus;
         logger.info(masterStatus);
-        e.reply(`状态已经切换为：${ masterStatus === true ? "忙碌" : "随时找我" }`);
+        e.reply(`状态已经切换为：${masterStatus === true ? "忙碌" : "随时找我"}`);
     }
 
     async todoList(e) {
@@ -142,7 +142,7 @@ export class Secretary extends plugin {
             for (let key of Object.keys(curGroupTodoList)) {
                 let content = `${key}: \n`;
                 for (let item of curGroupTodoList[key]) {
-                    content += `- ${ item }\n`;
+                    content += `- ${item}\n`;
                 }
                 keys += content + "\n";
             }
@@ -150,28 +150,36 @@ export class Secretary extends plugin {
             return;
         }
         const finalHTML = renderHTML(curGroupTodoList);
-        // 打开一个新的页面
-        const browser = await puppeteer.browserInit();
-        const page = await browser.newPage();
-        await page.setViewport({
-            width: 1280,
-            height: 720,
-            deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
-        });
-        // 设置页面内容为包含 Base64 图片的 HTML
-        await page.setContent(finalHTML, {
-            waitUntil: "networkidle0",
-        });
-        // 直接截图该元素
-        await page.screenshot({
-            path: "./todo.png",
-            type: "jpeg",
-            fullPage: true,
-            omitBackground: false,
-            quality: 50,
-        });
-        await e.reply(segment.image(fs.readFileSync("./todo.png")));
-        await browser.close();
+        let browser = null;
+        try {
+            // 打开一个新的页面
+            browser = await puppeteer.browserInit();
+            const page = await browser.newPage();
+            await page.setViewport({
+                width: 1280,
+                height: 720,
+                deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
+            });
+            // 设置页面内容为包含 Base64 图片的 HTML
+            await page.setContent(finalHTML, {
+                waitUntil: "networkidle0",
+            });
+            // 直接截图该元素
+            await page.screenshot({
+                path: "./todo.png",
+                type: "jpeg",
+                fullPage: true,
+                omitBackground: false,
+                quality: 50,
+            });
+            await e.reply(segment.image(fs.readFileSync("./todo.png")));
+            await browser.close();
+        } catch (error) {
+            logger.error(`截图失败: ${error}`);
+            if (browser) {
+                await browser.close();
+            }
+        }
     }
 
     async todoCls(e) {
@@ -328,7 +336,7 @@ const renderHTML = (curGroupTodoList) => {
 </head>
 <body>
     <ul class="todo-list">
-        ${ Object.keys(curGroupTodoList).map(key => {
+        ${Object.keys(curGroupTodoList).map(key => {
         return `
             <li class="todo-item">
                 <div class="user-info">

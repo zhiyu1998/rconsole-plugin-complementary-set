@@ -61,57 +61,65 @@ export class kimiJS extends plugin {
         try {
             const response = await axios.get(url, { responseType: 'arraybuffer' });
             await fs.promises.writeFile(outputPath, response.data);
-            logger.info(`文件已成功下载至 ${ outputPath }`);
+            logger.info(`文件已成功下载至 ${outputPath}`);
         } catch (error) {
             logger.error('无法下载文件:', error);
         }
     }
 
     async markdownRender(e, query, aiContent) {
-        // 打开一个新的页面
-        const browser = await puppeteer.browserInit();
-        const page = await browser.newPage();
+        let browser = null;
+        try {
+            // 打开一个新的页面
+            browser = await puppeteer.browserInit();
+            const page = await browser.newPage();
 
-        let aiReference;
-        if (aiContent.indexOf("搜索结果来自：") !== -1) {
-            const aiContentSplit = aiContent.split("搜索结果来自：");
-            aiContent = aiContentSplit[0];
-            aiReference = aiContentSplit?.[1] || "";
+            let aiReference;
+            if (aiContent.indexOf("搜索结果来自：") !== -1) {
+                const aiContentSplit = aiContent.split("搜索结果来自：");
+                aiContent = aiContentSplit[0];
+                aiReference = aiContentSplit?.[1] || "";
+            }
+
+            const htmlContent = renderHTML(e, query, aiContent);
+
+            await page.setViewport({
+                width: 1280,
+                height: 720,
+                deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
+            });
+            // 设置页面内容为包含 Base64 图片的 HTML
+            await page.setContent(htmlContent, {
+                waitUntil: "networkidle0",
+            });
+            // 获取页面上特定元素的位置和尺寸
+            const element = await page.$(".chat-container"); // 可以用CSS选择器选中你要截取的部分
+            // 直接截图该元素
+            await element.screenshot({
+                path: "./chat.png",
+                type: "jpeg",
+                fullPage: false,
+                omitBackground: false,
+                quality: 50,
+            });
+            await e.reply(segment.image(fs.readFileSync("./chat.png")));
+            aiReference !== undefined && await e.reply(Bot.makeForwardMsg(aiReference
+                .trim()
+                .split("\n")
+                .map(item => {
+                    return {
+                        message: { type: "text", text: item || "" },
+                        nickname: e.sender.card || e.user_id,
+                        user_id: e.user_id,
+                    };
+                })));
+            await browser.close();
+        } catch (error) {
+            logger.error(`截图失败: ${error}`);
+            if (browser) {
+                await browser.close();
+            }
         }
-
-        const htmlContent = renderHTML(e, query, aiContent);
-
-        await page.setViewport({
-            width: 1280,
-            height: 720,
-            deviceScaleFactor: 10, // 根据显示器的分辨率调整比例，2 是常见的 Retina 显示比例
-        });
-        // 设置页面内容为包含 Base64 图片的 HTML
-        await page.setContent(htmlContent, {
-            waitUntil: "networkidle0",
-        });
-        // 获取页面上特定元素的位置和尺寸
-        const element = await page.$(".chat-container"); // 可以用CSS选择器选中你要截取的部分
-        // 直接截图该元素
-        await element.screenshot({
-            path: "./chat.png",
-            type: "jpeg",
-            fullPage: false,
-            omitBackground: false,
-            quality: 50,
-        });
-        await e.reply(segment.image(fs.readFileSync("./chat.png")));
-        aiReference !== undefined && await e.reply(Bot.makeForwardMsg(aiReference
-            .trim()
-            .split("\n")
-            .map(item => {
-                return {
-                    message: { type: "text", text: item || "" },
-                    nickname: e.sender.card || e.user_id,
-                    user_id: e.user_id,
-                };
-            })));
-        await browser.close();
     }
 
     async getReplyMsg(e) {
@@ -175,7 +183,7 @@ export class kimiJS extends plugin {
         // 自动判断是否有引用文件和图片
         const { url, fileExt, fileType } = await this.autoGetUrl(e);
         if (url !== "") {
-            const downloadFileName = path.resolve(`./data/tmp.${ fileExt }`);
+            const downloadFileName = path.resolve(`./data/tmp.${fileExt}`);
             let defaultQuery = "";
             if (fileType === "image") {
                 await this.downloadImage(url, downloadFileName);
@@ -246,7 +254,7 @@ export class kimiJS extends plugin {
         }
 
         // 发起请求
-        const completion = await fetch(`${ this.baseURL }/v1/chat/completions`, {
+        const completion = await fetch(`${this.baseURL}/v1/chat/completions`, {
             method: 'POST',
             headers: this.headers,
             body: JSON.stringify({
@@ -341,14 +349,14 @@ const renderHTML = (e, query, aiContent) => {
         </div>
         <div class="message user-message">
             <div class="message-content">
-                <p>${ query }</p>
+                <p>${query}</p>
             </div>
-            <img src="http://q1.qlogo.cn/g?b=qq&nk=${ e.user_id }&s=100" alt="User Avatar" class="avatar">
+            <img src="http://q1.qlogo.cn/g?b=qq&nk=${e.user_id}&s=100" alt="User Avatar" class="avatar">
         </div>
         <div class="message ai-message">
             <img src="https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/kimi/kimi.png" alt="AI Avatar" class="avatar">
             <div class="message-content">
-                <div id="ai-content">${ marked.parse(aiContent) }</div>
+                <div id="ai-content">${marked.parse(aiContent)}</div>
             </div>
         </div>
     </div>
@@ -365,7 +373,7 @@ async function toBase64(filePath) {
     try {
         const fileData = await fs.promises.readFile(filePath);
         const base64Data = fileData.toString('base64');
-        return `data:${ getMimeType(filePath) };base64,${ base64Data }`;
+        return `data:${getMimeType(filePath)};base64,${base64Data}`;
     } catch (error) {
         logger.info(error);
     }
