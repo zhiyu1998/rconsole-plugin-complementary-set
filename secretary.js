@@ -27,7 +27,7 @@ export class Secretary extends plugin {
             name: "[R插件补集]小秘书",
             dsc: "让机器人抵挡at，然后制作成 TODO 后续统一处理",
             event: "message",
-            priority: 9999,
+            priority: 99999,
             rule: [
                 {
                     reg: "^(?!.*(小秘书切换状态|小秘书TODO|小秘书cls|小秘书我要)).+$",
