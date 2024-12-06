@@ -79,7 +79,7 @@ export class Screenshot extends plugin {
         // 设置截图的大小和视口尺寸
         // await page.setViewport({ width: 1280, height: 800 });
         // 截图并保存到文件
-        const buff = await page.screenshot({
+        await page.screenshot({
             path: './screenshot.png',
             type: 'jpeg',
             fullPage: true,
