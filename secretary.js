@@ -64,11 +64,30 @@ export class Secretary extends plugin {
         e.reply(`小秘书自动翻译：\n${ translateResultResp.split("翻译后：")?.[1] || "" }`, true);
     }
 
+    // 互联网抽象话翻译
+    async canUSpeak(e) {
+        const resp = await fetch(`https://lab.magiconch.com/api/nbnhhsh/guess`, {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                "text": e.msg
+            })
+        }).then(resp => resp.json());
+        const guess = resp?.[0].trans || resp?.[0].inputting;
+        e.reply(`小秘书自动理解抽象语言：\n${Array.isArray(guess) ? guess.join("、") : guess}`, true);
+    }
+
     async withstand(e) {
         queue.add(async () => {
             // 自主翻译
             if (e.msg !== undefined && isAllEnglishWithPunctuation(e.msg)) {
-                await this.translate_en2zh(e);
+                if (isSingleWord(e.msg)) {
+                    await this.canUSpeak(e);
+                } else {
+                    await this.translate_en2zh(e);
+                }
             }
             // 如果发言人是主人，那么就重置时间
             if (String(e.user_id) === masterId) {
@@ -182,6 +201,18 @@ function isAllEnglishWithPunctuation(str) {
     // 检查字符串不是单独的问号
     return regex.test(str) && str !== '?';
 }
+
+function isSingleWord(str) {
+    // 先去掉首尾空格
+    str = str.trim();
+
+    // 使用正则表达式匹配单个单词（仅包含字母或数字）
+    const regex = /^[A-Za-z0-9]+$/;
+
+    // 返回是否匹配单个单词
+    return regex.test(str);
+}
+
 
 // 启动或重置定时器
 function resetTimer(duration) {
