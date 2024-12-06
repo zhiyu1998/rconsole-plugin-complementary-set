@@ -158,6 +158,14 @@ export class Gemini extends plugin {
             // 获取消息数组
             const messages = replyMsg?.message;
 
+            // 先尝试处理forward消息
+            if (Array.isArray(messages)) {
+                const forwardMessages = await this.handleForwardMsg(messages);
+                if (forwardMessages[0].url !== "") {
+                    return forwardMessages;
+                }
+            }
+
             let replyMessages = [];
 
             if (Array.isArray(messages) && messages.length > 0) {
@@ -195,6 +203,14 @@ export class Gemini extends plugin {
                         replyMessages.push({
                             url,
                             fileExt,
+                            fileType
+                        });
+                    } else if (fileType === "text") {
+                        // 如果是一个文本
+                        url = msg.data?.text;
+                        replyMessages.push({
+                            url,
+                            fileExt: "",
                             fileType
                         });
                     }
@@ -240,23 +256,28 @@ export class Gemini extends plugin {
         let query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]/, '').trim();
         // 自动判断是否有引用文件和图片
         const replyMessages = await this.autoGetUrl(e);
+        logger.info(replyMessages);
 
         const collection = [];
         for (let [index, replyItem] of replyMessages.entries()) {
             const { url, fileExt, fileType } = replyItem;
             // 如果链接不为空，并且引用的内容不是文本
-            if (url !== "" && fileType !== "text") {
-                const downloadFileName = path.resolve(`./data/tmp${index}.${fileExt}`);
-                // 默认如果什么也不发送的查询
-                if (fileType === "image") {
-                    await this.downloadFile(url, downloadFileName, true);
-                } else {
-                    // file类型
-                    await this.downloadFile(url, downloadFileName, false);
-                }
+            const downloadFileName = path.resolve(`./data/tmp${index}.${fileExt}`);
+            // 默认如果什么也不发送的查询
+            if (fileType === "image") {
+                await this.downloadFile(url, downloadFileName, true);
                 collection.push(downloadFileName);
+            } else if (fileType === "video" || fileType === "file") {
+                // file类型
+                await this.downloadFile(url, downloadFileName, false);
+                collection.push(downloadFileName);
+            } else if (fileType === "text") {
+                // 如果是一个文本
+                query += `\n引用："${url}"`;
             }
         }
+        logger.info(query);
+        logger.info(collection);
 
         // 如果是有图像数据的
         if (collection.length > 0) {
@@ -278,7 +299,7 @@ export class Gemini extends plugin {
 
         // 请求 Gemini
         const completion = await this.fetchGeminiReq(query);
-        // 这里统一处理撤回消息，表示已经处理完成
+        // 这里统一处理撤回消息，示已经处理完成
         await this.clearTmpMsg(e);
         await e.reply(completion, true);
         return true;
@@ -334,6 +355,64 @@ export class Gemini extends plugin {
         const reqUrl = extractUrls(query)?.[0];
         const data = await fetch(`${llmCrawlBaseUrl}/crawl?url=${reqUrl}`).then(resp => resp.json());
         return data.data;
+    }
+
+    /**
+     * 处理合并转发消息
+     * @param messages 消息数组
+     * @returns {Promise<Array>} 返回处理后的消息数组
+     */
+    async handleForwardMsg(messages) {
+        let forwardMessages = [];
+
+        // 遍历消息数组寻找forward类型的消息
+        for (const msg of messages) {
+            if (msg.type === "forward") {
+                // 获取转发消息的内容
+                const forwardContent = msg.data?.content;
+
+                if (Array.isArray(forwardContent)) {
+                    // 遍历转发消息内容
+                    for (const forwardMsg of forwardContent) {
+                        const message = forwardMsg.message;
+
+                        if (Array.isArray(message)) {
+                            // 遍历每条消息的内容
+                            for (const item of message) {
+                                if (item.type === "image") {
+                                    forwardMessages.push({
+                                        url: item.data?.url,
+                                        fileExt: await this.extractFileExtension(item.data?.file),
+                                        fileType: "image"
+                                    });
+                                } else if (item.type === "video") {
+                                    forwardMessages.push({
+                                        url: item.data?.path || item.data?.url,
+                                        fileExt: await this.extractFileExtension(item.data?.file),
+                                        fileType: "video"
+                                    });
+                                } else if (item.type === "text") {
+                                    forwardMessages.push({
+                                        url: item.data?.text,
+                                        fileExt: "",
+                                        fileType: "text"
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    // 找到并处理完forward消息后直接返回
+                    return forwardMessages;
+                }
+            }
+        }
+
+        // 如果没有找到forward消息,返回空数组
+        return [{
+            url: "",
+            fileExt: "",
+            fileType: ""
+        }];
     }
 }
 
