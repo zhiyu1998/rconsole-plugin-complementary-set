@@ -3,17 +3,18 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 
+// 提示词
 const prompt = "请用中文回答问题";
+// 默认查询，也就是你只发送'#gemini'时，默认使用的发送，建议写的通用一些，这样可以使用在不限于video、image、file等
+const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型
 const model = "gemini-1.5-flash";
-// 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000
+// 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000，具体使用方法见：https://github.com/zhiyu1998/rconsole-plugin-complementary-set/tree/master/crawler
 const llmCrawlBaseUrl = "";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
-// 临时存储消息id，请勿修改
-let tmpMsgQueue = [];
 
 export class Gemini extends plugin {
     constructor() {
@@ -36,6 +37,8 @@ export class Gemini extends plugin {
             log: false
         };
         this.genAI = new GoogleGenerativeAI(aiApiKey);
+        // 临时存储消息id，请勿修改
+        this.tmpMsgQueue = [];
     }
 
     /**
@@ -150,7 +153,7 @@ export class Gemini extends plugin {
             const tmpMsg = await e.reply("正在上传引用，请稍候...", true);
             // 如果存在就暂时存放到队列
             if (tmpMsg?.data?.message_id) {
-                tmpMsgQueue.push(tmpMsg.data.message_id);
+                this.tmpMsgQueue.push(tmpMsg.data.message_id);
             }
             // 获取消息数组
             const messages = replyMsg?.message;
@@ -221,6 +224,17 @@ export class Gemini extends plugin {
         }];
     }
 
+    /**
+     * 清除临时消息
+     * @returns {Promise<void>}
+     */
+    async clearTmpMsg(e) {
+        if (this.tmpMsgQueue?.length > 0) {
+            for (const tmpMsgId of this.tmpMsgQueue) {
+                await e.bot.sendApi("delete_msg", { "message_id": tmpMsgId });
+            }
+        }
+    }
 
     async chat(e) {
         let query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]/, '').trim();
@@ -232,7 +246,7 @@ export class Gemini extends plugin {
             const { url, fileExt, fileType } = replyItem;
             // 如果链接不为空，并且引用的内容不是文本
             if (url !== "" && fileType !== "text") {
-                const downloadFileName = path.resolve(`./data/tmp${index}.${ fileExt }`);
+                const downloadFileName = path.resolve(`./data/tmp${index}.${fileExt}`);
                 // 默认如果什么也不发送的查询
                 if (fileType === "image") {
                     await this.downloadFile(url, downloadFileName, true);
@@ -244,27 +258,18 @@ export class Gemini extends plugin {
             }
         }
 
-        // 这里统一处理撤回消息，表示已经处理完成
-        if (tmpMsgQueue?.length > 0) {
-            for (const tmpMsgId of tmpMsgQueue) {
-                await e.bot.sendApi("delete_msg", {
-                    "message_id": tmpMsgId
-                });
-            }
-            tmpMsgQueue = [];
-        }
-
         // 如果是有图像数据的
         if (collection.length > 0) {
-            const defaultQuery = "描述一下内容";
             const completion = await this.fetchGeminiReq(query || defaultQuery, collection);
+            // 这里统一处理撤回消息，表示已经处理完成
+            await this.clearTmpMsg(e);
             await e.reply(completion, true);
             return;
         }
 
         // 如果引用的仅是一个文本
         if (replyMessages?.[0].fileType === "text") {
-            query += `\n引用："${ replyMessages?.[0].url }"`;
+            query += `\n引用："${replyMessages?.[0].url}"`;
         }
 
         // -- 下方可能返回的值为 { url: '', fileExt: '', fileType: '' }
@@ -273,6 +278,8 @@ export class Gemini extends plugin {
 
         // 请求 Gemini
         const completion = await this.fetchGeminiReq(query);
+        // 这里统一处理撤回消息，表示已经处理完成
+        await this.clearTmpMsg(e);
         await e.reply(completion, true);
         return true;
     }
@@ -286,11 +293,11 @@ export class Gemini extends plugin {
         if (llmCrawlBaseUrl !== '' && isContainsUrl(query)) {
             // 单纯包含了链接
             const llmData = await this.fetchLLMCrawlReq(query);
-            query += `\n搜索结果：${ llmData }`;
+            query += `\n搜索结果：${llmData}`;
         } else if (query.trim().startsWith("搜索")) {
             // 需要搜索
-            const llmData = await this.fetchLLMCrawlReq(`https://www.baidu.com/s?wd=${ query.replace("搜索", "") }`);
-            query += `\n搜索结果：${ llmData }`;
+            const llmData = await this.fetchLLMCrawlReq(`https://www.baidu.com/s?wd=${query.replace("搜索", "")}`);
+            query += `\n搜索结果：${llmData}`;
         }
         return query;
     }
@@ -325,7 +332,7 @@ export class Gemini extends plugin {
     async fetchLLMCrawlReq(query) {
         // 提取 http 链接
         const reqUrl = extractUrls(query)?.[0];
-        const data = await fetch(`${ llmCrawlBaseUrl }/crawl?url=${ reqUrl }`).then(resp => resp.json());
+        const data = await fetch(`${llmCrawlBaseUrl}/crawl?url=${reqUrl}`).then(resp => resp.json());
         return data.data;
     }
 }
@@ -357,6 +364,26 @@ function toGeminiInitData(filePath) {
 function getMimeType(filePath) {
     const ext = path.extname(filePath).toLowerCase();
     return mimeTypes[ext] || 'application/octet-stream';
+}
+
+/**
+ * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
+ * @param string
+ * @returns {boolean}
+ */
+function isContainsUrl(string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
+    return urlRegex.test(string);
+}
+
+/**
+ * 提取字符串中的链接
+ * @param string
+ * @returns {*|*[]}
+ */
+function extractUrls(string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
 }
 
 const mimeTypes = {
@@ -419,24 +446,3 @@ const mimeTypes = {
     '.php': 'application/x-php',
     '.sh': 'application/x-shellscript'
 };
-
-
-/**
- * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
- * @param string
- * @returns {boolean}
- */
-function isContainsUrl(string) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
-    return urlRegex.test(string);
-}
-
-/**
- * 提取字符串中的链接
- * @param string
- * @returns {*|*[]}
- */
-function extractUrls(string) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
-}
