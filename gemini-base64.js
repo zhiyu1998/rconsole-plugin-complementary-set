@@ -233,11 +233,29 @@ export class Gemini extends plugin {
             return replyMessages;
         }
 
-        return [{
-            url: "",
-            fileExt: "",
-            fileType: ""
-        }];
+        let replyMessages = [];
+        // 这种情况是直接发送的
+        const curMsg = await e.bot.sendApi("get_group_msg_history", {
+            "group_id": e.group_id,
+            "count": 1
+        });
+        const messages = curMsg.data.messages[0]?.message;
+        for (const msg of messages) {
+            if (msg.type === "image") {
+                return [{
+                    url: msg.data?.url,
+                    fileExt: await this.extractFileExtension(msg.data?.file_id),
+                    fileType: "image"
+                }];
+            } else if (msg.type === "text") {
+                return [{
+                    url: msg.data?.text,
+                    fileExt: "",
+                    fileType: "text"
+                }];
+            }
+        }
+        return replyMessages;
     }
 
     /**
