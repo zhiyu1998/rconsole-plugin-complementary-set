@@ -176,7 +176,7 @@ export class Gemini extends plugin {
                     if (fileType === "image") {
                         // 如果是图片，直���获取URL
                         url = msg.data?.url;
-                        fileExt = await this.extractFileExtension(msg.data?.file_id);
+                        fileExt = msg.data?.file?.match(/\.(jpg|jpeg|png|gif|webp)(?=\.|$)/i)?.[1] || 'jpg';
                         replyMessages.push({
                             url,
                             fileExt,
