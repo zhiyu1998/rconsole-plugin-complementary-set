@@ -302,7 +302,7 @@ export class Gemini extends plugin {
         }
 
         // 如果引用的仅是一个文本
-        if (replyMessages?.[0].fileType === "text") {
+        if (replyMessages.length > 0 && replyMessages?.[0].fileType === "text") {
             query += `\n引用："${replyMessages?.[0].url}"`;
         }
 
