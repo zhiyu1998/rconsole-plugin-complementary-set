@@ -13,10 +13,10 @@ export class OpenAt extends plugin {
             name: '[R插件补集]开at',
             dsc: '控制机器人在指定群at开关',
             event: 'message',
-            priority: 5000, // 指令优先级
+            priority: 5000,
             rule: [
                 {
-                    reg: '^#?开(at|艾特)', // 开启仅艾特触发
+                    reg: '^#?(开|关)(at|艾特)$',
                     fnc: 'at'
                 }
             ]
@@ -53,7 +53,7 @@ export class OpenAt extends plugin {
         }
         if (e.isGroup) {
             let document = this.parseYAML(file);
-            document.set(e.group_id, { onlyReplyAt: 1 });
+            e.msg.includes("开") ? document.set(e.group_id, { onlyReplyAt: 1 }) : document.set(e.group_id, { onlyReplyAt: 0 });
             this.writeYAML(file, document);
             return e.reply('已开启仅at和仅别名回复,at后开机即可解除此状态');
         } else {
