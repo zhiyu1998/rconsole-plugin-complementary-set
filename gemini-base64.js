@@ -242,18 +242,13 @@ export class Gemini extends plugin {
         const messages = curMsg.data.messages[0]?.message;
         for (const msg of messages) {
             if (msg.type === "image") {
-                return [{
+                replyMessages.push({
                     url: msg.data?.url,
                     fileExt: await this.extractFileExtension(msg.data?.file_id),
                     fileType: "image"
-                }];
-            } else if (msg.type === "text") {
-                return [{
-                    url: msg.data?.text,
-                    fileExt: "",
-                    fileType: "text"
-                }];
+                });
             }
+            // 如果以后有其他文件再添加
         }
         return replyMessages;
     }
