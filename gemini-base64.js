@@ -174,7 +174,7 @@ export class Gemini extends plugin {
                     fileType = msg.type;
 
                     if (fileType === "image") {
-                        // 如果是图片，直接获取URL
+                        // 如果是图片，直���获取URL
                         url = msg.data?.url;
                         fileExt = await this.extractFileExtension(msg.data?.file_id);
                         replyMessages.push({
@@ -380,9 +380,11 @@ export class Gemini extends plugin {
                             // 遍历每条消息的内容
                             for (const item of message) {
                                 if (item.type === "image") {
+                                    // 从file字段中提取真实的文件扩展名
+                                    const fileExt = item.data?.file?.match(/\.(jpg|jpeg|png|gif|webp)(?=\.|$)/i)?.[1] || 'jpg';
                                     forwardMessages.push({
                                         url: item.data?.url,
-                                        fileExt: await this.extractFileExtension(item.data?.file),
+                                        fileExt: fileExt.toLowerCase(),
                                         fileType: "image"
                                     });
                                 } else if (item.type === "video") {
