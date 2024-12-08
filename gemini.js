@@ -1,4 +1,4 @@
-// 1208更新：新增文字引用，新增图片+#gemini
+// 1208更新：新增文字引用，新增图片+#gemini。为避免冲突，修改接地搜索的触发词(#gemini接地 + [问题])。
 
 import axios from "axios";
 import fs from "fs";
@@ -21,7 +21,7 @@ const CLEAN_CRON = "3 8 * * *";
 
 const helpContent = `指令：
 (1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选)/ + #gemini + [问题](可选)
-(2) 接地搜索(免费API无法使用)：#gemini搜索 + [问题]
+(2) 接地搜索(免费API无法使用)：#gemini接地 + [问题]
 
 支持的文件格式有：
   // 音频
@@ -74,11 +74,11 @@ export class Gemini extends plugin {
       priority: 1,
       rule: [
         {
-            reg: '^#gemini(?!搜索|帮助)\\s*.*$',  // 使用否定前瞻(?!pattern)
+            reg: '^#gemini(?!接地|帮助)\\s*.*$',  // 使用否定前瞻(?!pattern)
             fnc: 'chat'
         },
         {
-            reg: '^#gemini搜索\\s*.*$',
+            reg: '^#gemini接地\\s*.*$',
             fnc: 'grounding'
         },
         {
@@ -496,7 +496,7 @@ export class Gemini extends plugin {
 
   //文本搜索功能
   async grounding(e) {
-    const query = e.msg.replace(/^#gemini搜索/, '').trim();
+    const query = e.msg.replace(/^#gemini接地/, '').trim();
 
     if (!query) {
       await e.reply('请输入有效的问题。', true);
