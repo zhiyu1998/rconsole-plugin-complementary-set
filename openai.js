@@ -4,7 +4,7 @@ import path from "path";
 import config from "../model/config.js";
 
 const prompt = "请用中文回答问题";
-// 默认查询，也就是你只发送'#gemini'时，默认使用的发送，建议写的通用一些，这样可以使用在不限于video、image、file等
+// 默认查询，建议写的通用一些，这样可以使用在不限于video、image、file等
 const defaultQuery = "描述一下内容";
 // base URL
 const openaiBaseURL = "";
@@ -57,14 +57,14 @@ export class OpenAI extends plugin {
 
         // 检查目录是否存在
         if (!fs.existsSync(fullPath)) {
-            logger.error(`[R插件补集][Gemini自动清理临时文件] 目录不存在: ${fullPath}`);
+            logger.error(`[R插件补集][OpenAI自动清理临时文件] 目录不存在: ${fullPath}`);
             return;
         }
 
         // 读取目录内容
         fs.readdir(fullPath, (err, files) => {
             if (err) {
-                logger.error(`[R插件补集][Gemini自动清理临时文件] 无法读取目录: ${fullPath}`, err);
+                logger.error(`[R插件补集][OpenAI自动清理临时文件] 无法读取目录: ${fullPath}`, err);
                 return;
             }
 
@@ -76,15 +76,15 @@ export class OpenAI extends plugin {
                 const filePath = path.join(fullPath, file);
                 fs.unlink(filePath, err => {
                     if (err) {
-                        logger.error(`[R插件补集][Gemini自动清理临时文件] 删除文件失败: ${filePath}`, err);
+                        logger.error(`[R插件补集][OpenAI自动清理临时文件] 删除文件失败: ${filePath}`, err);
                     } else {
-                        logger.info(`[R插件补集][Gemini自动清理临时文件] 已删除: ${filePath}`);
+                        logger.info(`[R插件补集][OpenAI自动清理临时文件] 已删除: ${filePath}`);
                     }
                 });
             });
 
             if (tmpFiles.length === 0) {
-                logger.info(`[R插件补集][Gemini自动清理临时文件] 暂时没有清理的文件。`);
+                logger.info(`[R插件补集][OpenAI自动清理临时文件] 暂时没有清理的文件。`);
             }
         });
     }
