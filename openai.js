@@ -12,6 +12,8 @@ const openaiBaseURL = "";
 const openaiApiKey = "";
 // 模型
 const openaiModel = "";
+// 每日 8 点 06 分自动清理临时文件
+const CLEAN_CRON = "6 8 * * *";
 
 export class OpenAI extends plugin {
     constructor() {
@@ -27,6 +29,12 @@ export class OpenAI extends plugin {
                 },
             ]
         });
+        this.task = {
+            cron: CLEAN_CRON,
+            name: 'OpenAI-自动清理临时文件',
+            fnc: () => this.autoCleanTmp(),
+            log: false
+        };
         // 配置文件
         this.toolsConfig = config.getConfig("tools");
         // 设置基础 URL 和 headers
@@ -38,6 +46,47 @@ export class OpenAI extends plugin {
         this.model = openaiModel || this.toolsConfig.aiModel;
         // 临时存储消息id，请勿修改
         this.tmpMsgQueue = [];
+    }
+
+    /**
+     * 自动清理垃圾函数
+     * @returns {Promise<void>}
+     */
+    async autoCleanTmp() {
+        const fullPath = path.resolve("./data");
+
+        // 检查目录是否存在
+        if (!fs.existsSync(fullPath)) {
+            logger.error(`[R插件补集][Gemini自动清理临时文件] 目录不存在: ${fullPath}`);
+            return;
+        }
+
+        // 读取目录内容
+        fs.readdir(fullPath, (err, files) => {
+            if (err) {
+                logger.error(`[R插件补集][Gemini自动清理临时文件] 无法读取目录: ${fullPath}`, err);
+                return;
+            }
+
+            // 筛选以 prefix 开头的文件
+            const tmpFiles = files.filter(file => file.startsWith("tmp"));
+
+            // 删除筛选到的文件
+            tmpFiles.forEach(file => {
+                const filePath = path.join(fullPath, file);
+                fs.unlink(filePath, err => {
+                    if (err) {
+                        logger.error(`[R插件补集][Gemini自动清理临时文件] 删除文件失败: ${filePath}`, err);
+                    } else {
+                        logger.info(`[R插件补集][Gemini自动清理临时文件] 已删除: ${filePath}`);
+                    }
+                });
+            });
+
+            if (tmpFiles.length === 0) {
+                logger.info(`[R插件补集][Gemini自动清理临时文件] 暂时没有清理的文件。`);
+            }
+        });
     }
 
     async downloadFile(url, outputPath) {
