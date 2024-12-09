@@ -21,7 +21,7 @@ export class OpenAI extends plugin {
             name: '[R插件补集] OpenAI 多模态助手',
             dsc: '来自 R插件补集 的 OpenAI 多模态助手，支持任何 OpenAI规范的模型',
             event: 'message',
-            priority: 1,
+            priority: 5001,
             rule: [
                 {
                     reg: /^[^#][sS]*/,
