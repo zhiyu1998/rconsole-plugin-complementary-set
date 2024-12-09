@@ -393,11 +393,62 @@ function getMimeType(filePath) {
 }
 
 const mimeTypes = {
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
+    // Audio
+    '.wav': 'audio/wav',
+    '.mp3': 'audio/mp3',
+    '.aiff': 'audio/aiff',
+    '.aac': 'audio/aac',
+    '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac',
+
+    // Images
     '.png': 'image/png',
+    '.jpeg': 'image/jpeg',
+    '.jpg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.heic': 'image/heic',
+    '.heif': 'image/heif',
     '.gif': 'image/gif',
+    '.bmp': 'image/bmp',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/vnd.microsoft.icon',
+    '.tiff': 'image/tiff',
+
+    // Videos
+    '.mp4': 'video/mp4',
+    '.mpeg': 'video/mpeg',
+    '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo',
+    '.flv': 'video/x-flv',
+    '.mpg': 'video/mpg',
+    '.webm': 'video/webm',
+    '.wmv': 'video/x-ms-wmv',
+    '.3gpp': 'video/3gpp',
+
+    // Documents and others
     '.pdf': 'application/pdf',
     '.txt': 'text/plain',
-    // 添加其他文件类型和MIME类型的映射
+    '.html': 'text/html',
+    '.htm': 'text/html',
+    '.css': 'text/css',
+    '.js': 'text/javascript', // 或 'application/x-javascript'
+    '.mjs': 'text/javascript', // 或 'application/x-javascript'
+    '.json': 'application/json',
+    '.md': 'text/md',
+    '.csv': 'text/csv',
+    '.xml': 'text/xml',
+    '.rtf': 'text/rtf',
+    '.zip': 'application/zip',
+    '.tar': 'application/x-tar',
+    '.gz': 'application/gzip',
+    '.rar': 'application/vnd.rar',
+    '.7z': 'application/x-7z-compressed',
+
+    // Programming languages
+    '.py': 'text/x-python', // 或 'application/x-python'
+    '.java': 'text/x-java-source',
+    '.c': 'text/x-c',
+    '.cpp': 'text/x-c++src',
+    '.php': 'application/x-php',
+    '.sh': 'application/x-shellscript'
 };
