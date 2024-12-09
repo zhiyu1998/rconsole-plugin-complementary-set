@@ -451,16 +451,6 @@ function toGeminiInitData(filePath) {
 }
 
 /**
- * 辅助函数：根据文件扩展名获取MIME类型
- * @param {string} filePath - 文件路径
- * @returns {string} MIME类型
- */
-function getMimeType(filePath) {
-    const ext = path.extname(filePath).toLowerCase();
-    return mimeTypes[ext] || 'application/octet-stream';
-}
-
-/**
  * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
  * @param string
  * @returns {boolean}

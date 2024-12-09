@@ -16,6 +16,7 @@
 - ✅ 他们在聊什么？
 - ✅ 多模态识别 - Gemini
 - ✅ 开前缀/at
+- ✅ OpenAI 多模态 - Gemini 衍生
 
 ## kimi.js 使用指南
 
@@ -294,6 +295,31 @@ pnpm add @google/generative-ai -w
 ```shell
 curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/openAt.js > plugins/example/openAt.js
 ```
+
+## OpenAI 多模态
+
+1. 克隆
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/openai.js > plugins/rconsole-plugin/apps/openai.js
+```
+
+2. 填写必要信息，如果 `R 插件填写则忽略`
+
+```shell
+// base URL
+const openaiBaseURL = "";
+// API Key
+const openaiApiKey = "";
+// 模型
+const openaiModel = "";
+```
+
+3. 直接使用 `@` 进行任何多模态操作（如果支持）
+
+![PixPin_2024-12-09_21-11-26.png](https://s2.loli.net/2024/12/09/kTgpM8hezm6sRoX.png)
+
+![PixPin_2024-12-09_21-12-34.png](https://s2.loli.net/2024/12/09/SZVah7cPIjJtAqx.png)
 
 ## 声明
 
