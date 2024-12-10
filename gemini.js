@@ -1,4 +1,4 @@
-// 1208更新：新增文字引用，新增图片+#gemini。为避免冲突，修改接地搜索的触发词(#gemini接地 + [问题])。
+// 1210更新：新增主人判断，主人和群友可以分别使用不同模型。
 
 import axios from "axios";
 import fs from "fs";
@@ -12,15 +12,16 @@ const prompt = "请用中文回答问题";
 const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
-// ai 模型
-const model = "gemini-1.5-flash";
+// ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
+const masterModel = "gemini-1.5-pro";
+const generalModel = "gemini-1.5-flash";
 // 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000，具体使用方法见：https://github.com/zhiyu1998/rconsole-plugin-complementary-set/tree/master/crawler
 const llmCrawlBaseUrl = "";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
 
 const helpContent = `指令：
-(1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选)/ + #gemini + [问题](可选)
+(1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选) + #gemini + [问题](可选)
 (2) 接地搜索(免费API无法使用)：#gemini接地 + [问题]
 
 支持的文件格式有：
@@ -350,6 +351,8 @@ export class Gemini extends plugin {
             }
             collection.push(downloadFileName);
             
+            // 模型选择：主人用主人模型，其他人用通用模型
+            const model = this?.e?.isMaster ? masterModel : generalModel;
             // 初始化 model
             const geminiModel = this.genAI.getGenerativeModel({ model: model });
             
@@ -399,6 +402,9 @@ export class Gemini extends plugin {
         if (collection.length === 0) {
           // 判断是否包含 https 链接
           query = await this.extendsSearchQuery(query);
+          // 模型选择：主人用主人模型，其他人用通用模型
+          const model = this?.e?.isMaster ? masterModel : generalModel;
+          // 初始化 model
           const geminiModel = this.genAI.getGenerativeModel({ model: model });
           const result = await geminiModel.generateContent([prompt, query]);
           await e.reply(result.response.text(), true);
@@ -502,6 +508,8 @@ export class Gemini extends plugin {
       await e.reply('请输入有效的问题。', true);
       return;
     }
+    // 模型选择：主人用主人模型，其他人用通用模型
+    const model = this?.e?.isMaster ? masterModel : generalModel;
 
     try {
       const geminiModelodel = this.genAI.getGenerativeModel(
