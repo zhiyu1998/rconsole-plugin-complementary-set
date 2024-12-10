@@ -9,7 +9,8 @@ const prompt = "请用中文回答问题";
 const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
-// ai 模型
+// ai 模型，masterModel -- 主人专用模型，model -- 通用模型，其他群友使用的模型
+const masterModel = "gemini-exp-1206";
 const model = "gemini-1.5-flash";
 // 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000，具体使用方法见：https://github.com/zhiyu1998/rconsole-plugin-complementary-set/tree/master/crawler
 const llmCrawlBaseUrl = "";
@@ -337,8 +338,10 @@ export class Gemini extends plugin {
     }
 
     async fetchGeminiReq(query, contentData = []) {
+        // 如果是主人就用好的模型，其他群友使用 Flash
+        const modelSelect = this?.e?.isMaster ? masterModel : model;
         // 定义通用的消息内容
-        const client = this.genAI.getGenerativeModel({ model: model });
+        const client = this.genAI.getGenerativeModel({ model: modelSelect });
 
         // 如果 query 是字符串，转换为数组
         const queryArray = Array.isArray(query) ? query : [{ text: query }];
