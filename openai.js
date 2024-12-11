@@ -351,7 +351,7 @@ export class OpenAI extends plugin {
             const completion = await this.fetchOpenAI(query || defaultQuery, collection);
             // 这里统一处理撤回消息，表示已经处理完成
             await this.clearTmpMsg(e);
-            await e.reply(completion, true);
+            await this.splitCompletion(e, completion);
             return;
         }
 
@@ -363,6 +363,17 @@ export class OpenAI extends plugin {
         const completion = await this.fetchOpenAI(query);
         // 这里统一处理撤回消息，示已经处理完成
         await this.clearTmpMsg(e);
+        await this.splitCompletion(e, completion);
+        return true;
+    }
+
+    /**
+     * 适配 free 系列的回答
+     * @param e
+     * @param completion
+     * @returns {Promise<void>}
+     */
+    async splitCompletion(e,completion) {
         // 如果出现搜索再进一步划分
         const contentSplit = completion.split("搜索结果来自：");
         await e.reply(contentSplit[0], true);
@@ -378,7 +389,6 @@ export class OpenAI extends plugin {
                     };
                 })));
         }
-        return true;
     }
 
     async fetchOpenAI(query, collection = []) {
