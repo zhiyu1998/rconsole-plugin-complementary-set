@@ -17,6 +17,9 @@
 - ✅ 多模态识别 - Gemini
 - ✅ 开前缀/at
 - ✅ OpenAI 多模态 - Gemini 衍生
+- 🤔 自用插件（群友开发的小插件）
+  - 自动审批入群
+  - 自动回应表情
 
 ## kimi.js 使用指南
 
@@ -320,6 +323,20 @@ const openaiModel = "";
 ![PixPin_2024-12-09_21-11-26.png](https://s2.loli.net/2024/12/09/kTgpM8hezm6sRoX.png)
 
 ![PixPin_2024-12-09_21-12-34.png](https://s2.loli.net/2024/12/09/SZVah7cPIjJtAqx.png)
+
+## 其他插件
+
+### 自动审批入群（来自群友 [@浅巷墨黎](https://github.com/Dnyo666)）
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/auto-enter-group.js > plugins/rconsole-plugin/apps/auto-enter-group.js
+```
+
+### 自动回应表情（来自群友 @辰）
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/auto-respond-face.js > plugins/rconsole-plugin/apps/auto-respond-face.js
+```
 
 ## 声明
 
