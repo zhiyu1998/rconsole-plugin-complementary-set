@@ -363,7 +363,21 @@ export class OpenAI extends plugin {
         const completion = await this.fetchOpenAI(query);
         // 这里统一处理撤回消息，示已经处理完成
         await this.clearTmpMsg(e);
-        await e.reply(completion, true);
+        // 如果出现搜索再进一步划分
+        const contentSplit = completion.split("搜索结果来自：");
+        await e.reply(contentSplit[0], true);
+        if (contentSplit?.[1] !== undefined) {
+            await e.reply(Bot.makeForwardMsg(contentSplit[1]
+                .trim()
+                .split("\n")
+                .map(item => {
+                    return {
+                        message: { type: "text", text: item || "" },
+                        nickname: e.sender.card || e.user_id,
+                        user_id: e.user_id,
+                    };
+                })));
+        }
         return true;
     }
 
