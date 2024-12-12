@@ -366,7 +366,10 @@ export class Gemini extends plugin {
                 logger.warn('未找到旧文件，将使用新内容更新。');
             }
 
-            const updatedContent = preserveAiApiKey(newContent, oldContent);
+            // 需要保存的变量名字
+            const variablesToPreserve = ['aiApiKey', 'masterModel', 'generalModel'];
+            // 开始替换
+            const updatedContent = preserveVariables(newContent, oldContent, variablesToPreserve);
 
             fs.writeFileSync(localFilePath, updatedContent, 'utf8');
         } catch (error) {
@@ -537,15 +540,19 @@ function toGeminiInitData(filePath) {
 
 /**
  * 保留 aiApiKey 值
- * @param content
- * @param oldContent
+ * @param content    新的版本的数据
+ * @param oldContent 之前版本的数据
+ * @param variables  保留的变量名字
  * @returns {*}
  */
-function preserveAiApiKey(content, oldContent) {
-    const aiApiKeyMatch = oldContent.match(/const\s+aiApiKey\s*=\s*"(.*?)";/);
-    const aiApiKeyValue = aiApiKeyMatch ? aiApiKeyMatch[1] : '';
-
-    return content.replace(/const\s+aiApiKey\s*=\s*".*?";/, `const aiApiKey = "${aiApiKeyValue}";`);
+function preserveVariables(content, oldContent, variables) {
+    variables.forEach(variable => {
+        const regex = new RegExp(`const\\s+${variable}\\s*=\\s*\"(.*?)\";`);
+        const match = oldContent.match(regex);
+        const value = match ? match[1] : '';
+        content = content.replace(regex, `const ${variable} = "${value}";`);
+    });
+    return content;
 }
 
 
