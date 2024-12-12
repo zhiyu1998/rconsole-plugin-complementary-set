@@ -27,6 +27,10 @@ export class Gemini extends plugin {
                     reg: /^#[Gg][Ee][Mm][Ii][Nn][Ii]/,
                     fnc: 'chat'
                 },
+                {
+                    reg: /^#gemiu$/,
+                    fnc: 'update'
+                }
             ]
         });
         this.task = {
@@ -322,6 +326,55 @@ export class Gemini extends plugin {
         return true;
     }
 
+    async update(e) {
+        if (e?.isMaster === false) {
+            logger.mark("[R插件补集] Gemini 多模态助手：检测到不是主人更新");
+            return false;
+        }
+
+        const giteeUrl = 'https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/gemini-base64.js';
+        const githubUrl = 'https://raw.githubusercontent.com/zhiyu1998/rconsole-plugin-complementary-set/refs/heads/master/gemini-base64.js';
+        try {
+            await this.updateGeminiFile(giteeUrl);
+            e.reply('[R插件补集] Gemini 多模态助手更新成功！更新源：Gitee', true);
+        } catch (error) {
+            logger.warn('从 Gitee 更新失败，尝试从 GitHub 更新...');
+            try {
+                await this.updateGeminiFile(githubUrl);
+                e.reply('[R插件补集] Gemini 多模态助手更新成功！更新源：GitHub', true);
+            } catch (githubError) {
+                logger.error('从 GitHub 更新也失败了，请检查网络连接或链接是否有效。');
+            }
+        }
+    }
+
+    /**
+     * Gemini 更新单文件
+     * @param url
+     * @returns {Promise<void>}
+     */
+    async updateGeminiFile(url) {
+        const localFilePath = path.resolve('./plugins/rconsole-plugin/apps/gemini.js');
+        try {
+            const response = await axios.get(url);
+            let newContent = response.data;
+
+            let oldContent = '';
+            try {
+                oldContent = fs.readFileSync(localFilePath, 'utf8');
+            } catch (err) {
+                logger.warn('未找到旧文件，将使用新内容更新。');
+            }
+
+            const updatedContent = preserveAiApiKey(newContent, oldContent);
+
+            fs.writeFileSync(localFilePath, updatedContent, 'utf8');
+        } catch (error) {
+            logger.error(`下载更新时出错: ${error.message}`);
+            throw error;
+        }
+    }
+
     /**
      * 扩展 2.0 Gemini搜索能力
      * @param e
@@ -483,13 +536,16 @@ function toGeminiInitData(filePath) {
 }
 
 /**
- * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
- * @param string
- * @returns {boolean}
+ * 保留 aiApiKey 值
+ * @param content
+ * @param oldContent
+ * @returns {*}
  */
-function isContainsUrl(string) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
-    return urlRegex.test(string);
+function preserveAiApiKey(content, oldContent) {
+    const aiApiKeyMatch = oldContent.match(/const\s+aiApiKey\s*=\s*"(.*?)";/);
+    const aiApiKeyValue = aiApiKeyMatch ? aiApiKeyMatch[1] : '';
+
+    return content.replace(/const\s+aiApiKey\s*=\s*".*?";/, `const aiApiKey = "${aiApiKeyValue}";`);
 }
 
 
