@@ -351,7 +351,7 @@ export class Gemini extends plugin {
             }
         );
 
-        const ans = completion.candidates?.[0].content?.parts?.[0]?.text;
+        const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
 
         e.reply(ans, true);
     }
