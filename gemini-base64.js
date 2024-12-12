@@ -330,12 +330,9 @@ export class Gemini extends plugin {
         const modelSelect = e?.isMaster ? masterModel : generalModel;
         logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
 
-        const completion = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${ modelSelect }:generateContent?key=${ aiApiKey }`, {
-            method: 'POST',
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+        const completion = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${aiApiKey}`,
+            {
                 contents: [{
                     parts: [
                         { text: prompt },
@@ -345,9 +342,14 @@ export class Gemini extends plugin {
                 tools: [{
                     googleSearch: {}
                 }]
-            }),
-            timeout: 100000
-        });
+            },
+            {
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                timeout: 100000
+            }
+        );
 
         const ans = completion.candidates?.[0].content?.parts?.[0]?.text;
 
