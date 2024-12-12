@@ -354,8 +354,19 @@ export class Gemini extends plugin {
         );
 
         const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
+        // 搜索的一些来源
+        const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks.map(item => {
+            const web = item.web;
+            return {
+                message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
+                nickname: e.sender.card || e.user_id,
+                user_id: e.user_id,
+            };
+        });
 
-        e.reply(ans, true);
+        await e.reply(ans, true);
+        // 发送搜索来源
+        await e.reply(Bot.makeForwardMsg(searchChunks));
     }
 
     async fetchGeminiReq(query, contentData = []) {
