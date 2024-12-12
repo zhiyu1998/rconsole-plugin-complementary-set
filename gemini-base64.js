@@ -327,7 +327,8 @@ export class Gemini extends plugin {
      * @returns {Promise<*>}
      */
     async extendsSearchQuery(e, query) {
-        const modelSelect = this?.e?.isMaster ? masterModel : generalModel;
+        const modelSelect = e?.isMaster ? masterModel : generalModel;
+        logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
 
         const completion = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${ modelSelect }:generateContent?key=${ aiApiKey }`, {
             method: 'POST',
@@ -353,7 +354,7 @@ export class Gemini extends plugin {
     async fetchGeminiReq(query, contentData = []) {
         // 如果是主人就用好的模型，其他群友使用 Flash
         const modelSelect = this?.e?.isMaster ? masterModel : generalModel;
-        logger.info(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
+        logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
         // 定义通用的消息内容
         const client = this.genAI.getGenerativeModel({ model: modelSelect });
 
