@@ -335,12 +335,12 @@ export class Gemini extends plugin {
         const giteeUrl = 'https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/gemini-base64.js';
         const githubUrl = 'https://raw.githubusercontent.com/zhiyu1998/rconsole-plugin-complementary-set/refs/heads/master/gemini-base64.js';
         try {
-            await this.updateGeminiFile(giteeUrl);
+            await this.updateGeminiFile(githubUrl);
             e.reply('[R插件补集] Gemini 多模态助手更新成功！更新源：Gitee', true);
         } catch (error) {
             logger.warn('从 Gitee 更新失败，尝试从 GitHub 更新...');
             try {
-                await this.updateGeminiFile(githubUrl);
+                await this.updateGeminiFile(giteeUrl);
                 e.reply('[R插件补集] Gemini 多模态助手更新成功！更新源：GitHub', true);
             } catch (githubError) {
                 logger.error('从 GitHub 更新也失败了，请检查网络连接或链接是否有效。');
