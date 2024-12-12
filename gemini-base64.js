@@ -288,8 +288,8 @@ export class Gemini extends plugin {
                 query += `\n引用："${ url }"`;
             }
         }
-        logger.info(query);
-        logger.info(collection);
+        logger.mark(query);
+        logger.mark(collection);
 
         // 如果是有图像数据的
         if (collection.length > 0) {
@@ -309,7 +309,7 @@ export class Gemini extends plugin {
         // 判断当前模型是什么
         const curModel = e?.isMaster ? masterModel : generalModel;
         // 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
-        if (query.trim().startsWith("搜索") && curModel === "gemini-2.0-flash-exp") {
+        if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix)) && curModel === "gemini-2.0-flash-exp") {
             await this.extendsSearchQuery(e, query);
             return true;
         }
@@ -362,7 +362,7 @@ export class Gemini extends plugin {
             const searchChunksRes = searchChunks.map(item => {
                 const web = item.web;
                 return {
-                    message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
+                    message: { type: "text", text: `📌 网站：${web.title}\n🌍 来源：${web.uri}` || "" },
                     nickname: e.sender.card || e.user_id,
                     user_id: e.user_id,
                 };
