@@ -104,7 +104,7 @@ export class Gemini extends plugin {
     async gemiHelp(e) {
         await e.reply(helpContent, true);
       }
-        
+
     /**
      * 自动清理垃圾函数
      * @returns {Promise<void>}
@@ -154,7 +154,7 @@ export class Gemini extends plugin {
      * @returns {Promise<void>}
      */
     async downloadFile(url, outputPath, useStream = false) {
-      try {    
+      try {
         if (useStream) {
           const response = await axios({
             url,
@@ -182,7 +182,7 @@ export class Gemini extends plugin {
         logger.error('无法下载文件:', error.message);
         throw error;
       }
-    }    
+    }
 
   // 获取最近消息
   async getReplyMsg(e) {
@@ -335,25 +335,25 @@ export class Gemini extends plugin {
         let query = e.msg.replace(/^#gemini/, '').trim();
         const replyMessages = await this.autoGetUrl(e);
         const collection = [];
-      
+
         for (let [index, replyItem] of replyMessages.entries()) {
           const { url, fileExt, fileType } = replyItem;
-          
+
           if (fileType === "image" || fileType === "video" || fileType === "file") {
             const downloadFileName = path.resolve(`./data/tmp${index}.${fileExt}`);
-            
+
             if (fileType === "image") {
               await this.downloadFile(url, downloadFileName, true);
             } else {
               await this.downloadFile(url, downloadFileName, false);
             }
             collection.push(downloadFileName);
-            
+
             // 模型选择：主人用主人模型，其他人用通用模型
             const model = this?.e?.isMaster ? masterModel : generalModel;
             // 初始化 model
             const geminiModel = this.genAI.getGenerativeModel({ model: model });
-            
+
             await new Promise((resolve, reject) => {
               setTimeout(async () => {
                 try {
@@ -361,17 +361,17 @@ export class Gemini extends plugin {
                     mimeType: getMimeType(downloadFileName),
                     displayName: `file_${Date.now()}`
                   });
-      
+
                   let file = await this.fileManager.getFile(uploadResponse.file.name);
                   while (file.state === FileState.PROCESSING) {
                     await new Promise(resolve => setTimeout(resolve, 10000));
                     file = await this.fileManager.getFile(uploadResponse.file.name);
                   }
-      
+
                   if (file.state === FileState.FAILED || file.state !== FileState.ACTIVE) {
                     throw new Error("处理失败，请稍后重试");
                   }
-      
+
                   const result = await geminiModel.generateContent([
                     prompt,
                     {
@@ -382,7 +382,7 @@ export class Gemini extends plugin {
                     },
                     { text: query || defaultQuery }
                   ]);
-                  
+
                   await e.reply(result.response.text(), true);
                   resolve();
                 } catch (error) {
@@ -396,10 +396,12 @@ export class Gemini extends plugin {
             query += `\n引用："${url}"`;
           }
         }
-      
+
         if (collection.length === 0) {
           // 判断是否包含 https 链接，或者搜索字段
-          if (isContainsUrl(query) || query.trim().startsWith("搜索")) {
+          const curModel = e?.isMaster ? masterModel : generalModel;
+          // 满足 http 链接 | 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
+          if ((isContainsUrl(query) || query.trim().startsWith("搜索")) && curModel === "gemini-2.0-flash-exp") {
             await this.extendsSearchQuery(e, query);
             return true;
           }
@@ -411,7 +413,7 @@ export class Gemini extends plugin {
           const result = await geminiModel.generateContent([prompt, query]);
           await e.reply(result.response.text(), true);
         }
-      
+
         // 清理临时消息
         await this.clearTmpMsg(e);
         return true;
@@ -627,7 +629,7 @@ const mimeTypes = {
     '.aac': 'audio/aac',
     '.ogg': 'audio/ogg',
     '.flac': 'audio/flac',
-  
+
     // 图片
     '.png': 'image/png',
     '.jpeg': 'image/jpeg',
@@ -635,7 +637,7 @@ const mimeTypes = {
     '.webp': 'image/webp',
     '.heic': 'image/heic',
     '.heif': 'image/heif',
-  
+
     // 视频
     '.mp4': 'video/mp4',
     '.mpeg': 'video/mpeg',
@@ -646,7 +648,7 @@ const mimeTypes = {
     '.webm': 'video/webm',
     '.wmv': 'video/wmv',
     '.3gpp': 'video/3gpp',
-  
+
     // 文档
     '.pdf': 'application/pdf',
     '.js': 'text/javascript',

@@ -306,8 +306,10 @@ export class Gemini extends plugin {
         }
 
         // -- 下方可能返回的值为 { url: '', fileExt: '', fileType: '' }
-        // 判断是否包含 https 链接
-        if (isContainsUrl(query) || query.trim().startsWith("搜索")) {
+        // 判断当前模型是什么
+        const curModel = e?.isMaster ? masterModel : generalModel;
+        // 满足 http 链接 | 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
+        if ((isContainsUrl(query) || query.trim().startsWith("搜索")) && curModel === "gemini-2.0-flash-exp") {
             await this.extendsSearchQuery(e, query);
             return true;
         }
