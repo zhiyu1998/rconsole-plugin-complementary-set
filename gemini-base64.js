@@ -9,7 +9,7 @@ const prompt = "请用中文回答问题";
 const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
-// ai 模型，masterModel -- 主人专用模型，model -- 通用模型，其他群友使用的模型
+// ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
 const masterModel = "gemini-2.0-flash-exp";
 const generalModel = "gemini-1.5-flash";
 // 每日 8 点 03 分自动清理临时文件
