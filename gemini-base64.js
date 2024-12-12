@@ -322,6 +322,7 @@ export class Gemini extends plugin {
 
     /**
      * 扩展 2.0 Gemini搜索能力
+     * @param e
      * @param query
      * @returns {Promise<*>}
      */
