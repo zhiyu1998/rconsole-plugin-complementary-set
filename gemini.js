@@ -1,4 +1,4 @@
-// 1210更新：新增主人判断，主人和群友可以分别使用不同模型。
+// 1212更新：增加gemini的搜索能力，使用 #gemini帮助 查看。
 
 import axios from "axios";
 import fs from "fs";
@@ -13,16 +13,15 @@ const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
-const masterModel = "gemini-1.5-pro";
-const generalModel = "gemini-1.5-flash";
-// 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000，具体使用方法见：https://github.com/zhiyu1998/rconsole-plugin-complementary-set/tree/master/crawler
-const llmCrawlBaseUrl = "";
+const masterModel = "gemini-2.0-flash-exp";
+const generalModel = "gemini-2.0-flash-exp";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
 
 const helpContent = `指令：
 (1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选) + #gemini + [问题](可选)
 (2) 接地搜索(免费API无法使用)：#gemini接地 + [问题]
+(2) gemini 2.0专用搜索(测试版，免费)：#gemini搜索 + [问题]
 
 支持的文件格式有：
   // 音频
@@ -105,7 +104,7 @@ export class Gemini extends plugin {
     async gemiHelp(e) {
         await e.reply(helpContent, true);
       }
-
+        
     /**
      * 自动清理垃圾函数
      * @returns {Promise<void>}
@@ -155,36 +154,35 @@ export class Gemini extends plugin {
      * @returns {Promise<void>}
      */
     async downloadFile(url, outputPath, useStream = false) {
-        try {
-            if (useStream) {
-                // 使用流式方式下载
-                const response = await axios({
-                    url,
-                    method: 'GET',
-                    responseType: 'stream',
-                });
-                await new Promise((resolve, reject) => {
-                    response.data
-                        .pipe(fs.createWriteStream(outputPath))
-                        .on('finish', () => {
-                            logger.info(`文件已成功流式下载至 ${outputPath}`);
-                            resolve();
-                        })
-                        .on('error', (err) => {
-                            logger.error('文件流下载失败:', err.message);
-                            reject(err);
-                        });
-                });
-            } else {
-                // 使用一次性写入方式下载
-                const response = await axios.get(url, { responseType: 'arraybuffer' });
-                await fs.promises.writeFile(outputPath, response.data);
-                logger.info(`文件已成功下载至 ${outputPath}`);
-            }
-        } catch (error) {
-            logger.error('无法下载文件:', error.message);
+      try {    
+        if (useStream) {
+          const response = await axios({
+            url,
+            method: 'GET',
+            responseType: 'stream',
+          });
+          await new Promise((resolve, reject) => {
+            response.data
+              .pipe(fs.createWriteStream(outputPath))
+              .on('finish', () => {
+                logger.info(`文件已成功流式下载至 ${outputPath}`);
+                resolve();
+              })
+              .on('error', (err) => {
+                logger.error('文件流下载失败:', err.message);
+                reject(err);
+              });
+          });
+        } else {
+          const response = await axios.get(url, { responseType: 'arraybuffer' });
+          await fs.promises.writeFile(outputPath, response.data);
+          logger.info(`文件已成功下载至 ${outputPath}`);
         }
-    }
+      } catch (error) {
+        logger.error('无法下载文件:', error.message);
+        throw error;
+      }
+    }    
 
   // 获取最近消息
   async getReplyMsg(e) {
@@ -400,8 +398,12 @@ export class Gemini extends plugin {
         }
       
         if (collection.length === 0) {
-          // 判断是否包含 https 链接
-          query = await this.extendsSearchQuery(query);
+          // 判断是否包含 https 链接，或者搜索字段
+          if (isContainsUrl(query) || query.trim().startsWith("搜索")) {
+            await this.extendsSearchQuery(e, query);
+            return true;
+          }
+
           // 模型选择：主人用主人模型，其他人用通用模型
           const model = this?.e?.isMaster ? masterModel : generalModel;
           // 初始化 model
@@ -414,31 +416,6 @@ export class Gemini extends plugin {
         await this.clearTmpMsg(e);
         return true;
       }
-
-    /**
-     * 扩展弱搜索能力
-     * @param query
-     * @returns {Promise<*>}
-     */
-    async extendsSearchQuery(query) {
-        if (llmCrawlBaseUrl !== '' && isContainsUrl(query)) {
-            // 单纯包含了链接
-            const llmData = await this.fetchLLMCrawlReq(query);
-            query += `\n搜索结果：${llmData}`;
-        } else if (query.trim().startsWith("搜索")) {
-            // 需要搜索
-            const llmData = await this.fetchLLMCrawlReq(`https://www.baidu.com/s?wd=${query.replace("搜索", "")}`);
-            query += `\n搜索结果：${llmData}`;
-        }
-        return query;
-    }
-
-    async fetchLLMCrawlReq(query) {
-        // 提取 http 链接
-        const reqUrl = extractUrls(query)?.[0];
-        const data = await fetch(`${llmCrawlBaseUrl}/crawl?url=${reqUrl}`).then(resp => resp.json());
-        return data.data;
-    }
 
     /**
      * 处理合并转发消息
@@ -500,7 +477,8 @@ export class Gemini extends plugin {
         }];
     }
 
-  //文本搜索功能
+
+  //接地搜索功能
   async grounding(e) {
     const query = e.msg.replace(/^#gemini接地/, '').trim();
 
@@ -570,6 +548,42 @@ export class Gemini extends plugin {
         await e.reply('处理请求时发生错误。', true);
       }
     }
+  }
+
+    /**
+     * 扩展 2.0 Gemini搜索能力
+     * @param e
+     * @param query
+     * @returns {Promise<*>}
+     */
+    async extendsSearchQuery(e, query) {
+      const model = e?.isMaster ? masterModel : generalModel;
+      logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ model }`);
+
+      const completion = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiApiKey}`,
+        {
+            contents: [{
+                parts: [
+                    { text: prompt },
+                    { text: query }
+                ]
+            }],
+            tools: [{
+                googleSearch: {}
+            }]
+        },
+        {
+            headers: {
+                "Content-Type": "application/json"
+            },
+            timeout: 100000
+        }
+    );
+
+    const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
+
+    e.reply(ans, true);
   }
 
 
