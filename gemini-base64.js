@@ -308,8 +308,8 @@ export class Gemini extends plugin {
         // -- 下方可能返回的值为 { url: '', fileExt: '', fileType: '' }
         // 判断当前模型是什么
         const curModel = e?.isMaster ? masterModel : generalModel;
-        // 满足 http 链接 | 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
-        if ((isContainsUrl(query) || query.trim().startsWith("搜索")) && curModel === "gemini-2.0-flash-exp") {
+        // 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
+        if (query.trim().startsWith("搜索") && curModel === "gemini-2.0-flash-exp") {
             await this.extendsSearchQuery(e, query);
             return true;
         }
@@ -354,19 +354,22 @@ export class Gemini extends plugin {
         );
 
         const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
-        // 搜索的一些来源
-        const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks.map(item => {
-            const web = item.web;
-            return {
-                message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
-                nickname: e.sender.card || e.user_id,
-                user_id: e.user_id,
-            };
-        });
-
         await e.reply(ans, true);
-        // 发送搜索来源
-        await e.reply(Bot.makeForwardMsg(searchChunks));
+
+        // 搜索的一些来源
+        const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
+        if (searchChunks !== undefined) {
+            const searchChunksRes = searchChunks.map(item => {
+                const web = item.web;
+                return {
+                    message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
+                    nickname: e.sender.card || e.user_id,
+                    user_id: e.user_id,
+                };
+            });
+            // 发送搜索来源
+            await e.reply(Bot.makeForwardMsg(searchChunksRes));
+        }
     }
 
     async fetchGeminiReq(query, contentData = []) {
@@ -489,15 +492,6 @@ function isContainsUrl(string) {
     return urlRegex.test(string);
 }
 
-/**
- * 提取字符串中的链接
- * @param string
- * @returns {*|*[]}
- */
-function extractUrls(string) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
-}
 
 const mimeTypes = {
     // Audio
