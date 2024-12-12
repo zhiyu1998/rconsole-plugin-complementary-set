@@ -10,10 +10,8 @@ const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，model -- 通用模型，其他群友使用的模型
-const masterModel = "gemini-exp-1206";
+const masterModel = "gemini-2.0-flash-exp";
 const generalModel = "gemini-1.5-flash";
-// 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000，具体使用方法见：https://github.com/zhiyu1998/rconsole-plugin-complementary-set/tree/master/crawler
-const llmCrawlBaseUrl = "";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
 
@@ -51,14 +49,14 @@ export class Gemini extends plugin {
 
         // 检查目录是否存在
         if (!fs.existsSync(fullPath)) {
-            logger.error(`[R插件补集][Gemini自动清理临时文件] 目录不存在: ${fullPath}`);
+            logger.error(`[R插件补集][Gemini自动清理临时文件] 目录不存在: ${ fullPath }`);
             return;
         }
 
         // 读取目录内容
         fs.readdir(fullPath, (err, files) => {
             if (err) {
-                logger.error(`[R插件补集][Gemini自动清理临时文件] 无法读取目录: ${fullPath}`, err);
+                logger.error(`[R插件补集][Gemini自动清理临时文件] 无法读取目录: ${ fullPath }`, err);
                 return;
             }
 
@@ -70,9 +68,9 @@ export class Gemini extends plugin {
                 const filePath = path.join(fullPath, file);
                 fs.unlink(filePath, err => {
                     if (err) {
-                        logger.error(`[R插件补集][Gemini自动清理临时文件] 删除文件失败: ${filePath}`, err);
+                        logger.error(`[R插件补集][Gemini自动清理临时文件] 删除文件失败: ${ filePath }`, err);
                     } else {
-                        logger.info(`[R插件补集][Gemini自动清理临时文件] 已删除: ${filePath}`);
+                        logger.info(`[R插件补集][Gemini自动清理临时文件] 已删除: ${ filePath }`);
                     }
                 });
             });
@@ -103,7 +101,7 @@ export class Gemini extends plugin {
                     response.data
                         .pipe(fs.createWriteStream(outputPath))
                         .on('finish', () => {
-                            logger.info(`文件已成功流式下载至 ${outputPath}`);
+                            logger.info(`文件已成功流式下载至 ${ outputPath }`);
                             resolve();
                         })
                         .on('error', (err) => {
@@ -115,7 +113,7 @@ export class Gemini extends plugin {
                 // 使用一次性写入方式下载
                 const response = await axios.get(url, { responseType: 'arraybuffer' });
                 await fs.promises.writeFile(outputPath, response.data);
-                logger.info(`文件已成功下载至 ${outputPath}`);
+                logger.info(`文件已成功下载至 ${ outputPath }`);
             }
         } catch (error) {
             logger.error('无法下载文件:', error.message);
@@ -228,7 +226,7 @@ export class Gemini extends plugin {
                         fileExt: "",
                         fileType
                     }
-                ]
+                ];
             }
 
             return replyMessages;
@@ -276,7 +274,7 @@ export class Gemini extends plugin {
         for (let [index, replyItem] of replyMessages.entries()) {
             const { url, fileExt, fileType } = replyItem;
             // 如果链接不为空，并且引用的内容不是文本
-            const downloadFileName = path.resolve(`./data/tmp${index}.${fileExt}`);
+            const downloadFileName = path.resolve(`./data/tmp${ index }.${ fileExt }`);
             // 默认如果什么也不发送的查询
             if (fileType === "image") {
                 await this.downloadFile(url, downloadFileName, true);
@@ -287,7 +285,7 @@ export class Gemini extends plugin {
                 collection.push(downloadFileName);
             } else if (fileType === "text") {
                 // 如果是一个文本
-                query += `\n引用："${url}"`;
+                query += `\n引用："${ url }"`;
             }
         }
         logger.info(query);
@@ -304,12 +302,15 @@ export class Gemini extends plugin {
 
         // 如果引用的仅是一个文本
         if (replyMessages.length > 0 && replyMessages?.[0].fileType === "text") {
-            query += `\n引用："${replyMessages?.[0].url}"`;
+            query += `\n引用："${ replyMessages?.[0].url }"`;
         }
 
         // -- 下方可能返回的值为 { url: '', fileExt: '', fileType: '' }
         // 判断是否包含 https 链接
-        query = await this.extendsSearchQuery(query);
+        if (isContainsUrl(query) || query.trim().startsWith("搜索")) {
+            await this.extendsSearchQuery(e, query);
+            return true;
+        }
 
         // 请求 Gemini
         const completion = await this.fetchGeminiReq(query);
@@ -320,26 +321,38 @@ export class Gemini extends plugin {
     }
 
     /**
-     * 扩展弱搜索能力
+     * 扩展 2.0 Gemini搜索能力
      * @param query
      * @returns {Promise<*>}
      */
-    async extendsSearchQuery(query) {
-        if (llmCrawlBaseUrl !== '' && isContainsUrl(query)) {
-            // 单纯包含了链接
-            const llmData = await this.fetchLLMCrawlReq(query);
-            query += `\n搜索结果：${llmData}`;
-        } else if (query.trim().startsWith("搜索")) {
-            // 需要搜索
-            const llmData = await this.fetchLLMCrawlReq(`https://www.baidu.com/s?wd=${query.replace("搜索", "")}`);
-            query += `\n搜索结果：${llmData}`;
-        }
-        return query;
+    async extendsSearchQuery(e, query) {
+        const modelSelect = this?.e?.isMaster ? masterModel : generalModel;
+
+        const completion = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${ modelSelect }:generateContent?key=${ aiApiKey }`, {
+            method: 'POST',
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: query }]
+                }],
+                tools: [{
+                    googleSearch: {}
+                }]
+            }),
+            timeout: 100000
+        });
+
+        const ans = completion.candidates?.[0].content?.parts?.[0]?.text;
+
+        e.reply(ans, true);
     }
 
     async fetchGeminiReq(query, contentData = []) {
         // 如果是主人就用好的模型，其他群友使用 Flash
         const modelSelect = this?.e?.isMaster ? masterModel : generalModel;
+        logger.info(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
         // 定义通用的消息内容
         const client = this.genAI.getGenerativeModel({ model: modelSelect });
 
@@ -364,13 +377,6 @@ export class Gemini extends plugin {
 
         // 返回生成的文本
         return result.response.text();
-    }
-
-    async fetchLLMCrawlReq(query) {
-        // 提取 http 链接
-        const reqUrl = extractUrls(query)?.[0];
-        const data = await fetch(`${llmCrawlBaseUrl}/crawl?url=${reqUrl}`).then(resp => resp.json());
-        return data.data;
     }
 
     /**
