@@ -337,7 +337,10 @@ export class Gemini extends plugin {
             },
             body: JSON.stringify({
                 contents: [{
-                    parts: [{ text: query }]
+                    parts: [
+                        { text: prompt },
+                        { text: query }
+                    ]
                 }],
                 tools: [{
                     googleSearch: {}
