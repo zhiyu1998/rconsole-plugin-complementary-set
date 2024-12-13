@@ -11,7 +11,7 @@ export class RemoveBg2 extends plugin {
             priority: 5000,
             rule: [
                 {
-                    reg: "^扣扣2$",
+                    reg: "^扣扣$",
                     fnc: "removeBG",
                 }
             ]
