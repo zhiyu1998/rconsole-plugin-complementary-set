@@ -17,6 +17,7 @@
 - ✅ 多模态识别 - Gemini
 - ✅ 开前缀/at
 - ✅ OpenAI 多模态 - Gemini 衍生
+- ✅ 扣扣（去除背景） - 驱动自 `remove.bg`
 - 🤔 自用插件（群友开发的小插件）
   - ✅ 自动审批入群
   - ✅ 自动回应表情
@@ -287,9 +288,9 @@ pnpm add @google/generative-ai -w
 
 ![PixPin_2024-11-29_19-56-34.png](https://s2.loli.net/2024/11/29/JED4gQmY3l6bLCF.png)
 
-6. [拓展] 增加 Gemini 的联网能力
+~~6. [拓展] 增加 Gemini 的联网能力~~
 
-> ➡️ [点击阅读](./crawler/README.md)
+~~> ➡️ [点击阅读](./crawler/README.md)~~
 
 ## 开前缀/at
 
@@ -323,6 +324,26 @@ const openaiModel = "";
 ![PixPin_2024-12-09_21-11-26.png](https://s2.loli.net/2024/12/09/kTgpM8hezm6sRoX.png)
 
 ![PixPin_2024-12-09_21-12-34.png](https://s2.loli.net/2024/12/09/SZVah7cPIjJtAqx.png)
+
+## 扣扣（去除背景）
+
+1. 克隆
+
+```shell
+curl -fsSL https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/remove-bg2.js > plugins/rconsole-plugin/apps/remove-bg.js
+```
+
+2. 去 [remove.bg](https://www.remove.bg/dashboard#api-key) 申请一个 Key
+
+3. 填写到文件里面
+
+```javascript
+const REMOVEBG_KEY = "";
+```
+
+4. 使用`扣扣`开始抠图
+
+![PixPin_2024-12-13_22-24-32.png](https://s2.loli.net/2024/12/13/8MPdvF91zKIDW36.png)
 
 ## 其他插件
 
