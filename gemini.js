@@ -1,4 +1,4 @@
-// 1212更新：增加gemini的搜索能力，使用 #gemini帮助 查看。
+// 1214更新：(1) 修复bug：关闭引用合并转发消息(file api版本不支持)。(2) #gemini帮助可以查看当前模型
 
 import axios from "axios";
 import fs from "fs";
@@ -20,10 +20,12 @@ const CLEAN_CRON = "3 8 * * *";
 
 const helpContent = `指令：
 (1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选) + #gemini + [问题](可选)
-(2) 接地搜索(免费API无法使用)：#gemini接地 + [问题]
 (2) gemini 2.0专用搜索(测试版，免费)：#gemini搜索 + [问题]
+(3) 接地搜索(免费API无法使用)：#gemini接地 + [问题]
 
-支持的文件格式有：
+当前模型： ${masterModel} (主人)| ${generalModel} (通用)
+
+支持的文件格式有(不要超过2GB)：
   // 音频
   '.wav': 'audio/wav',
   '.mp3': 'audio/mp3',
@@ -223,13 +225,13 @@ export class Gemini extends plugin {
         // 获取消息数组
         const messages = replyMsg?.message;
 
-        // 先尝试处理forward消息
-        if (Array.isArray(messages)) {
-            const forwardMessages = await this.handleForwardMsg(messages);
-            if (forwardMessages[0].url !== "") {
-                return forwardMessages;
-            }
-        }
+        // 先尝试处理forward消息 (file api 版本不支持)
+        // if (Array.isArray(messages)) {
+        //     const forwardMessages = await this.handleForwardMsg(messages);
+        //     if (forwardMessages[0].url !== "") {
+        //         return forwardMessages;
+        //     }
+        // }
 
         let replyMessages = [];
 
@@ -419,65 +421,65 @@ export class Gemini extends plugin {
         return true;
       }
 
-    /**
-     * 处理合并转发消息
-     * @param messages 消息数组
-     * @returns {Promise<Array>} 返回处理后的消息数组
-     */
-    async handleForwardMsg(messages) {
-        let forwardMessages = [];
+    // /**
+    //  * 处理合并转发消息 (file api 版本不支持)
+    //  * @param messages 消息数组
+    //  * @returns {Promise<Array>} 返回处理后的消息数组
+    //  */
+    // async handleForwardMsg(messages) {
+    //     let forwardMessages = [];
 
-        // 遍历消息数组寻找forward类型的消息
-        for (const msg of messages) {
-            if (msg.type === "forward") {
-                // 获取转发消息的内容
-                const forwardContent = msg.data?.content;
+    //     // 遍历消息数组寻找forward类型的消息
+    //     for (const msg of messages) {
+    //         if (msg.type === "forward") {
+    //             // 获取转发消息的内容
+    //             const forwardContent = msg.data?.content;
 
-                if (Array.isArray(forwardContent)) {
-                    // 遍历转发消息内容
-                    for (const forwardMsg of forwardContent) {
-                        const message = forwardMsg.message;
+    //             if (Array.isArray(forwardContent)) {
+    //                 // 遍历转发消息内容
+    //                 for (const forwardMsg of forwardContent) {
+    //                     const message = forwardMsg.message;
 
-                        if (Array.isArray(message)) {
-                            // 遍历每条消息的内容
-                            for (const item of message) {
-                                if (item.type === "image") {
-                                    // 从file字段中提取真实的文件扩展名
-                                    const fileExt = item.data?.file?.match(/\.(jpg|jpeg|png|heic|heif|webp)(?=\.|$)/i)?.[1] || 'jpg';
-                                    forwardMessages.push({
-                                        url: item.data?.url,
-                                        fileExt: fileExt.toLowerCase(),
-                                        fileType: "image"
-                                    });
-                                } else if (item.type === "video") {
-                                    forwardMessages.push({
-                                        url: item.data?.path || item.data?.url,
-                                        fileExt: await this.extractFileExtension(item.data?.file),
-                                        fileType: "video"
-                                    });
-                                } else if (item.type === "text") {
-                                    forwardMessages.push({
-                                        url: item.data?.text,
-                                        fileExt: "",
-                                        fileType: "text"
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    // 找到并处理完forward消息后直接返回
-                    return forwardMessages;
-                }
-            }
-        }
+    //                     if (Array.isArray(message)) {
+    //                         // 遍历每条消息的内容
+    //                         for (const item of message) {
+    //                             if (item.type === "image") {
+    //                                 // 从file字段中提取真实的文件扩展名
+    //                                 const fileExt = item.data?.file?.match(/\.(jpg|jpeg|png|heic|heif|webp)(?=\.|$)/i)?.[1] || 'jpg';
+    //                                 forwardMessages.push({
+    //                                     url: item.data?.url,
+    //                                     fileExt: fileExt.toLowerCase(),
+    //                                     fileType: "image"
+    //                                 });
+    //                             } else if (item.type === "video") {
+    //                                 forwardMessages.push({
+    //                                     url: item.data?.path || item.data?.url,
+    //                                     fileExt: await this.extractFileExtension(item.data?.file),
+    //                                     fileType: "video"
+    //                                 });
+    //                             } else if (item.type === "text") {
+    //                                 forwardMessages.push({
+    //                                     url: item.data?.text,
+    //                                     fileExt: "",
+    //                                     fileType: "text"
+    //                                 });
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+    //                 // 找到并处理完forward消息后直接返回
+    //                 return forwardMessages;
+    //             }
+    //         }
+    //     }
 
-        // 如果没有找到forward消息,返回空数组
-        return [{
-            url: "",
-            fileExt: "",
-            fileType: ""
-        }];
-    }
+    //     // 如果没有找到forward消息,返回空数组
+    //     return [{
+    //         url: "",
+    //         fileExt: "",
+    //         fileType: ""
+    //     }];
+    // }
 
 
   //接地搜索功能
