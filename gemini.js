@@ -1,4 +1,4 @@
-// 1214更新：(1) 修复bug：关闭引用合并转发消息(file api版本不支持)。(2) #gemini帮助可以查看当前模型
+// 1214更新2：支持修改模型：#gemini设置模型 [主人模型] [通用模型](可选，留空会与主人模型同步) 
 
 import axios from "axios";
 import fs from "fs";
@@ -13,59 +13,10 @@ const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
-const masterModel = "gemini-2.0-flash-exp";
-const generalModel = "gemini-2.0-flash-exp";
+let masterModel = "gemini-2.0-flash-exp";
+let generalModel = "gemini-2.0-flash-exp";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
-
-const helpContent = `指令：
-(1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选) + #gemini + [问题](可选)
-(2) gemini 2.0专用搜索(测试版，免费)：#gemini搜索 + [问题]
-(3) 接地搜索(免费API无法使用)：#gemini接地 + [问题]
-
-当前模型： ${masterModel} (主人)| ${generalModel} (通用)
-
-支持的文件格式有(不要超过2GB)：
-  // 音频
-  '.wav': 'audio/wav',
-  '.mp3': 'audio/mp3',
-  '.aiff': 'audio/aiff',
-  '.aac': 'audio/aac',
-  '.ogg': 'audio/ogg',
-  '.flac': 'audio/flac',
-
-  // 图片
-  '.png': 'image/png',
-  '.jpeg': 'image/jpeg',
-  '.jpg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.heic': 'image/heic',
-  '.heif': 'image/heif',
-
-  // 视频
-  '.mp4': 'video/mp4',
-  '.mpeg': 'video/mpeg',
-  '.mov': 'video/mov',
-  '.avi': 'video/avi',
-  '.flv': 'video/x-flv',
-  '.mpg': 'video/mpg',
-  '.webm': 'video/webm',
-  '.wmv': 'video/wmv',
-  '.3gpp': 'video/3gpp',
-
-  // 文档
-  '.pdf': 'application/pdf',
-  '.js': 'text/javascript',
-  '.py': 'text/x-python',
-  '.txt': 'text/plain',
-  '.html': 'text/html',
-  '.htm': 'text/html',
-  '.css': 'text/css',
-  '.md': 'text/md',
-  '.csv': 'text/csv',
-  '.xml': 'text/xml',
-  '.rtf': 'text/rtf',
-`;
 
 export class Gemini extends plugin {
   constructor() {
@@ -76,7 +27,7 @@ export class Gemini extends plugin {
       priority: 1,
       rule: [
         {
-            reg: '^#gemini(?!接地|帮助)\\s*.*$',  // 使用否定前瞻(?!pattern)
+            reg: '^#gemini(?!接地|帮助|设置模型)\\s*.*$',  // 使用否定前瞻(?!pattern)
             fnc: 'chat'
         },
         {
@@ -86,6 +37,10 @@ export class Gemini extends plugin {
         {
             reg: '^#gemini帮助\\s*.*$',
             fnc: 'gemiHelp'
+        },
+        {
+            reg: '^#gemini设置模型\\s*(.*)\\s*(.*)$',
+            fnc: 'setModels'
         }
     ],
     });
@@ -104,8 +59,36 @@ export class Gemini extends plugin {
 
     // gemini帮助
     async gemiHelp(e) {
-        await e.reply(helpContent, true);
+      await e.reply(getHelpContent(), true);
+    }
+    
+    //模型修改功能 
+    async setModels(e) {
+      if (!e.isMaster) {
+        await e.reply('只有主人才能修改模型设置', true);
+        return;
       }
+      
+      // 检查命令后是否有参数
+      const input = e.msg.replace(/^#gemini设置模型/, '').trim();
+      if (!input) {
+        await e.reply('请指定要设置的模型名称\n格式：#gemini设置模型 [主人模型] [通用模型](可选)', true);
+        return;
+      }
+      
+      const match = e.msg.match(/^#gemini设置模型\s+(.+?)(?:\s+(.+))?$/);
+      if (!match) {
+        await e.reply('命令格式错误\n格式：#gemini设置模型 [主人模型] [通用模型](可选)', true);
+        return;
+      }
+      
+      const [, newMasterModel, newGeneralModel] = match;
+      masterModel = newMasterModel;
+      generalModel = newGeneralModel || newMasterModel;
+      await e.reply(`模型设置已更新：\n主人模型: ${masterModel}\n通用模型: ${generalModel}`, true);
+    }
+    
+    
 
     /**
      * 自动清理垃圾函数
@@ -678,3 +661,24 @@ const mimeTypes = {
     '.xml': 'text/xml',
     '.rtf': 'text/rtf',
   };
+
+  // 获取帮助内容
+  function getHelpContent() {
+    // 将 mimeTypes 对象转换为易读的字符串
+    const mimeTypesString = Object.entries(mimeTypes)
+      .map(([ext, mime]) => `${ext}: ${mime}`)
+      .join('\n  ');
+  
+    return `指令：
+  (1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选) #gemini [问题](可选)
+  (2) gemini 2.0专用搜索(测试版，免费)：#gemini搜索 [问题]
+  (3) 接地搜索(免费API无法使用)：#gemini接地 [问题]
+  (4) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
+  
+  当前模型： ${masterModel} (主人)| ${generalModel} (通用)
+  
+  支持的文件格式有(不要超过2GB)：
+    ${mimeTypesString}
+  `;
+  }
+  
