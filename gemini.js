@@ -1,4 +1,4 @@
-// 1214更新2：支持修改模型：#gemini设置模型 [主人模型] [通用模型](可选，留空会与主人模型同步) 
+// 1215更新：修复bug：为防止api被循环调用导致的滥用，限制每次请求最多只能处理2张图片。 
 
 import axios from "axios";
 import fs from "fs";
@@ -322,6 +322,9 @@ export class Gemini extends plugin {
         const collection = [];
 
         for (let [index, replyItem] of replyMessages.entries()) {
+          // 最多循环2次，之后放弃请求api，防止api被滥用
+          if (index >= 2) break;
+
           const { url, fileExt, fileType } = replyItem;
 
           if (fileType === "image" || fileType === "video" || fileType === "file") {
@@ -678,7 +681,7 @@ const mimeTypes = {
   当前模型： ${masterModel} (主人)| ${generalModel} (通用)
   
   支持的文件格式有(不要超过2GB)：
-    ${mimeTypesString}
+  ${mimeTypesString}
   `;
   }
   
