@@ -14,6 +14,8 @@ const masterModel = "gemini-2.0-flash-exp";
 const generalModel = "gemini-1.5-flash";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
+// 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000，具体使用方法见：https://github.com/zhiyu1998/rconsole-plugin-complementary-set/tree/master/crawler
+const llmCrawlBaseUrl = "";
 
 export class Gemini extends plugin {
     constructor() {
@@ -313,9 +315,8 @@ export class Gemini extends plugin {
         // 判断当前模型是什么
         const curModel = e?.isMaster ? masterModel : generalModel;
         // 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
-        if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix)) && curModel === "gemini-2.0-flash-exp") {
-            await this.extendsSearchQuery(e, query);
-            return true;
+        if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix))) {
+            query = await this.extendsSearchQuery(query);
         }
 
         // 请求 Gemini
@@ -380,52 +381,33 @@ export class Gemini extends plugin {
 
     /**
      * 扩展 2.0 Gemini搜索能力
-     * @param e
      * @param query
      * @returns {Promise<*>}
      */
-    async extendsSearchQuery(e, query) {
-        const modelSelect = e?.isMaster ? masterModel : generalModel;
-        logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
-
-        const completion = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${aiApiKey}`,
-            {
-                contents: [{
-                    parts: [
-                        { text: prompt },
-                        { text: query }
-                    ]
-                }],
-                tools: [{
-                    googleSearch: {}
-                }]
-            },
-            {
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                timeout: 100000
-            }
-        );
-
-        const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
-        await e.reply(ans, true);
-
-        // 搜索的一些来源
-        const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
-        if (searchChunks !== undefined) {
-            const searchChunksRes = searchChunks.map(item => {
-                const web = item.web;
-                return {
-                    message: { type: "text", text: `📌 网站：${web.title}\n🌍 来源：${web.uri}` || "" },
-                    nickname: e.sender.card || e.user_id,
-                    user_id: e.user_id,
-                };
-            });
-            // 发送搜索来源
-            await e.reply(Bot.makeForwardMsg(searchChunksRes));
+    async extendsSearchQuery(query) {
+        if (llmCrawlBaseUrl !== '' && isContainsUrl(query)) {
+            // 单纯包含了链接
+            const llmData = await this.fetchLLMCrawlReq(query);
+            query += `\n搜索结果：${llmData}`;
+        } else if (query.trim().startsWith("搜索")) {
+            // 需要搜索
+            logger.mark(`[R插件补集][Gemini] 开始搜索：${query.replace("搜索", "")}`);
+            const llmData = await this.fetchLLMCrawlReq(`https://m.sogou.com/web/searchList.jsp?keyword=${query.replace("搜索", "")}`);
+            query += `\n搜索结果：${llmData}`;
         }
+        return query;
+    }
+
+    /**
+     * 请求 LLM Crawl 服务器
+     * @param query
+     * @returns {Promise<*>}
+     */
+    async fetchLLMCrawlReq(query) {
+        // 提取 http 链接
+        const reqUrl = extractUrls(query)?.[0];
+        const data = await fetch(`${llmCrawlBaseUrl}/crawl?url=${reqUrl}`).then(resp => resp.json());
+        return data.data;
     }
 
     async fetchGeminiReq(query, contentData = []) {
@@ -536,6 +518,26 @@ function toGeminiInitData(filePath) {
             mimeType
         },
     };
+}
+
+/**
+ * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
+ * @param string
+ * @returns {boolean}
+ */
+function isContainsUrl(string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
+    return urlRegex.test(string);
+}
+
+/**
+ * 提取字符串中的链接
+ * @param string
+ * @returns {*|*[]}
+ */
+function extractUrls(string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
 }
 
 /**
