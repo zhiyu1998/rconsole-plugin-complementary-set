@@ -1,4 +1,4 @@
-// 1215更新：修复bug：为防止api被循环调用导致的滥用，限制每次请求最多只能处理2张图片。 
+// 1217更新：增加上传文件大小限制(可修改)，防止api和服务器资源被滥用。 
 
 import axios from "axios";
 import fs from "fs";
@@ -15,6 +15,8 @@ const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
 let masterModel = "gemini-2.0-flash-exp";
 let generalModel = "gemini-2.0-flash-exp";
+// 上传最大文件大小限制(单位:字节)(最大2GB)
+const maxFileSize = 2 * 1024 * 1024 * 1024; // 2GB
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
 
@@ -335,6 +337,18 @@ export class Gemini extends plugin {
             } else {
               await this.downloadFile(url, downloadFileName, false);
             }
+
+            // 检查文件大小
+            const stats = fs.statSync(downloadFileName);
+            const fileSizeInBytes = stats.size;
+            const fileSizeInMB = fileSizeInBytes / (1024 * 1024);
+            console.log(`[R插件补集][Gemini] 文件大小: ${fileSizeInMB.toFixed(2)} MB`);
+
+            if (stats.size > maxFileSize) {
+              await e.reply(`文件大小超过限制，最大允许${maxFileSize / (1024 * 1024 * 1024)}GB`, true);
+              return false;
+            }
+
             collection.push(downloadFileName);
 
             // 模型选择：主人用主人模型，其他人用通用模型
@@ -680,7 +694,7 @@ const mimeTypes = {
   
   当前模型： ${masterModel} (主人)| ${generalModel} (通用)
   
-  支持的文件格式有(不要超过2GB)：
+  支持的文件格式有：
   ${mimeTypesString}
   `;
   }
