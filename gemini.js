@@ -1,3 +1,4 @@
+// 1218更新：(1) 关闭 #gemini搜索 指令 (2)重新开放引用合并转发，但只能读取前2条内容
 // 1217更新：增加上传文件大小限制(可修改)，防止api和服务器资源被滥用。 
 
 import axios from "axios";
@@ -210,13 +211,13 @@ export class Gemini extends plugin {
         // 获取消息数组
         const messages = replyMsg?.message;
 
-        // 先尝试处理forward消息 (file api 版本不支持)
-        // if (Array.isArray(messages)) {
-        //     const forwardMessages = await this.handleForwardMsg(messages);
-        //     if (forwardMessages[0].url !== "") {
-        //         return forwardMessages;
-        //     }
-        // }
+        // 先尝试处理forward消息
+        if (Array.isArray(messages)) {
+            const forwardMessages = await this.handleForwardMsg(messages);
+            if (forwardMessages[0].url !== "") {
+                return forwardMessages;
+            }
+        }
 
         let replyMessages = [];
 
@@ -401,12 +402,12 @@ export class Gemini extends plugin {
 
         if (collection.length === 0) {
           // 判断是否包含 https 链接，或者搜索字段
-          const curModel = e?.isMaster ? masterModel : generalModel;
+          // const curModel = e?.isMaster ? masterModel : generalModel;
           // 满足 http 链接 | 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
-          if ((isContainsUrl(query) || query.trim().startsWith("搜索")) && curModel === "gemini-2.0-flash-exp") {
-            await this.extendsSearchQuery(e, query);
-            return true;
-          }
+          // if ((isContainsUrl(query) || query.trim().startsWith("搜索")) && curModel === "gemini-2.0-flash-exp") {
+          //   await this.extendsSearchQuery(e, query);
+          //   return true;
+          // }
 
           // 模型选择：主人用主人模型，其他人用通用模型
           const model = this?.e?.isMaster ? masterModel : generalModel;
@@ -421,65 +422,65 @@ export class Gemini extends plugin {
         return true;
       }
 
-    // /**
-    //  * 处理合并转发消息 (file api 版本不支持)
-    //  * @param messages 消息数组
-    //  * @returns {Promise<Array>} 返回处理后的消息数组
-    //  */
-    // async handleForwardMsg(messages) {
-    //     let forwardMessages = [];
+    /**
+     * 处理合并转发消息 (file api 版本不支持)
+     * @param messages 消息数组
+     * @returns {Promise<Array>} 返回处理后的消息数组
+     */
+    async handleForwardMsg(messages) {
+        let forwardMessages = [];
 
-    //     // 遍历消息数组寻找forward类型的消息
-    //     for (const msg of messages) {
-    //         if (msg.type === "forward") {
-    //             // 获取转发消息的内容
-    //             const forwardContent = msg.data?.content;
+        // 遍历消息数组寻找forward类型的消息
+        for (const msg of messages) {
+            if (msg.type === "forward") {
+                // 获取转发消息的内容
+                const forwardContent = msg.data?.content;
 
-    //             if (Array.isArray(forwardContent)) {
-    //                 // 遍历转发消息内容
-    //                 for (const forwardMsg of forwardContent) {
-    //                     const message = forwardMsg.message;
+                if (Array.isArray(forwardContent)) {
+                    // 遍历转发消息内容
+                    for (const forwardMsg of forwardContent) {
+                        const message = forwardMsg.message;
 
-    //                     if (Array.isArray(message)) {
-    //                         // 遍历每条消息的内容
-    //                         for (const item of message) {
-    //                             if (item.type === "image") {
-    //                                 // 从file字段中提取真实的文件扩展名
-    //                                 const fileExt = item.data?.file?.match(/\.(jpg|jpeg|png|heic|heif|webp)(?=\.|$)/i)?.[1] || 'jpg';
-    //                                 forwardMessages.push({
-    //                                     url: item.data?.url,
-    //                                     fileExt: fileExt.toLowerCase(),
-    //                                     fileType: "image"
-    //                                 });
-    //                             } else if (item.type === "video") {
-    //                                 forwardMessages.push({
-    //                                     url: item.data?.path || item.data?.url,
-    //                                     fileExt: await this.extractFileExtension(item.data?.file),
-    //                                     fileType: "video"
-    //                                 });
-    //                             } else if (item.type === "text") {
-    //                                 forwardMessages.push({
-    //                                     url: item.data?.text,
-    //                                     fileExt: "",
-    //                                     fileType: "text"
-    //                                 });
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //                 // 找到并处理完forward消息后直接返回
-    //                 return forwardMessages;
-    //             }
-    //         }
-    //     }
+                        if (Array.isArray(message)) {
+                            // 遍历每条消息的内容
+                            for (const item of message) {
+                                if (item.type === "image") {
+                                    // 从file字段中提取真实的文件扩展名
+                                    const fileExt = item.data?.file?.match(/\.(jpg|jpeg|png|heic|heif|webp)(?=\.|$)/i)?.[1] || 'jpg';
+                                    forwardMessages.push({
+                                        url: item.data?.url,
+                                        fileExt: fileExt.toLowerCase(),
+                                        fileType: "image"
+                                    });
+                                } else if (item.type === "video") {
+                                    forwardMessages.push({
+                                        url: item.data?.path || item.data?.url,
+                                        fileExt: await this.extractFileExtension(item.data?.file),
+                                        fileType: "video"
+                                    });
+                                } else if (item.type === "text") {
+                                    forwardMessages.push({
+                                        url: item.data?.text,
+                                        fileExt: "",
+                                        fileType: "text"
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    // 找到并处理完forward消息后直接返回
+                    return forwardMessages;
+                }
+            }
+        }
 
-    //     // 如果没有找到forward消息,返回空数组
-    //     return [{
-    //         url: "",
-    //         fileExt: "",
-    //         fileType: ""
-    //     }];
-    // }
+        // 如果没有找到forward消息,返回空数组
+        return [{
+            url: "",
+            fileExt: "",
+            fileType: ""
+        }];
+    }
 
 
   //接地搜索功能
@@ -554,55 +555,55 @@ export class Gemini extends plugin {
     }
   }
 
-    /**
-     * 扩展 2.0 Gemini搜索能力
-     * @param e
-     * @param query
-     * @returns {Promise<*>}
-     */
-    async extendsSearchQuery(e, query) {
-      const model = e?.isMaster ? masterModel : generalModel;
-      logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ model }`);
+  //   /**
+  //    * 扩展 2.0 Gemini搜索能力
+  //    * @param e
+  //    * @param query
+  //    * @returns {Promise<*>}
+  //    */
+  //   async extendsSearchQuery(e, query) {
+  //     const model = e?.isMaster ? masterModel : generalModel;
+  //     logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ model }`);
 
-      const completion = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiApiKey}`,
-        {
-            contents: [{
-                parts: [
-                    { text: prompt },
-                    { text: query }
-                ]
-            }],
-            tools: [{
-                googleSearch: {}
-            }]
-        },
-        {
-            headers: {
-                "Content-Type": "application/json"
-            },
-            timeout: 100000
-        }
-    );
+  //     const completion = await axios.post(
+  //       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiApiKey}`,
+  //       {
+  //           contents: [{
+  //               parts: [
+  //                   { text: prompt },
+  //                   { text: query }
+  //               ]
+  //           }],
+  //           tools: [{
+  //               googleSearch: {}
+  //           }]
+  //       },
+  //       {
+  //           headers: {
+  //               "Content-Type": "application/json"
+  //           },
+  //           timeout: 100000
+  //       }
+  //   );
 
-    const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
-    await e.reply(ans, true);
+  //   const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
+  //   await e.reply(ans, true);
 
-    // 搜索的一些来源
-    const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
-    if (searchChunks !== undefined) {
-        const searchChunksRes = searchChunks.map(item => {
-            const web = item.web;
-            return {
-                message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
-                nickname: e.sender.card || e.user_id,
-                user_id: e.user_id,
-            };
-        });
-        // 发送搜索来源
-        await e.reply(Bot.makeForwardMsg(searchChunksRes));
-    }
-  }
+  //   // 搜索的一些来源
+  //   const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
+  //   if (searchChunks !== undefined) {
+  //       const searchChunksRes = searchChunks.map(item => {
+  //           const web = item.web;
+  //           return {
+  //               message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
+  //               nickname: e.sender.card || e.user_id,
+  //               user_id: e.user_id,
+  //           };
+  //       });
+  //       // 发送搜索来源
+  //       await e.reply(Bot.makeForwardMsg(searchChunksRes));
+  //   }
+  // }
 
 
 }
@@ -617,25 +618,25 @@ function getMimeType(filePath) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
-/**
- * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
- * @param string
- * @returns {boolean}
- */
-function isContainsUrl(string) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
-    return urlRegex.test(string);
-}
+// /**
+//  * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
+//  * @param string
+//  * @returns {boolean}
+//  */
+// function isContainsUrl(string) {
+//     const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
+//     return urlRegex.test(string);
+// }
 
-/**
- * 提取字符串中的链接
- * @param string
- * @returns {*|*[]}
- */
-function extractUrls(string) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
-}
+// /**
+//  * 提取字符串中的链接
+//  * @param string
+//  * @returns {*|*[]}
+//  */
+// function extractUrls(string) {
+//     const urlRegex = /(https?:\/\/[^\s]+)/g;
+//     return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
+// }
 
 const mimeTypes = {
     // 音频
@@ -688,9 +689,8 @@ const mimeTypes = {
   
     return `指令：
   (1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选) #gemini [问题](可选)
-  (2) gemini 2.0专用搜索(测试版，免费)：#gemini搜索 [问题]
-  (3) 接地搜索(免费API无法使用)：#gemini接地 [问题]
-  (4) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
+  (2) 接地搜索(免费API无法使用)：#gemini接地 [问题]
+  (3) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
   
   当前模型： ${masterModel} (主人)| ${generalModel} (通用)
   
