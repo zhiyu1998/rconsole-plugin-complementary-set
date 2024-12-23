@@ -10,10 +10,12 @@ const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
-const masterModel = "gemini-2.0-flash-thinking-exp-1219";
+const masterModel = "gemini-2.0-flash-exp";
 const generalModel = "gemini-2.0-flash-exp";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
+// 是否使用LLM Crawl，默认使用 Gemini 默认搜索
+let isLLMSearch = false;
 // 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000，具体使用方法见：https://github.com/zhiyu1998/rconsole-plugin-complementary-set/tree/master/crawler
 const llmCrawlBaseUrl = "";
 
@@ -315,8 +317,11 @@ export class Gemini extends plugin {
         // 判断当前模型是什么
         const curModel = e?.isMaster ? masterModel : generalModel;
         // 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
-        if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix))) {
-            query = await this.extendsSearchQuery(query);
+        if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix)) && isLLMSearch) {
+            query = await this.extendsLLMSearchQuery(query);
+        } else if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix))) {
+            await this.extendsSearchQuery(e, query);
+            return true;
         }
 
         // 请求 Gemini
@@ -368,7 +373,7 @@ export class Gemini extends plugin {
             }
 
             // 需要保存的变量名字
-            const variablesToPreserve = ['aiApiKey', 'masterModel', 'generalModel', 'llmCrawlBaseUrl'];
+            const variablesToPreserve = ['aiApiKey', 'masterModel', 'generalModel', "isLLMSearch", 'llmCrawlBaseUrl'];
             // 开始替换
             const updatedContent = preserveVariables(newContent, oldContent, variablesToPreserve);
 
@@ -380,11 +385,11 @@ export class Gemini extends plugin {
     }
 
     /**
-     * 扩展 2.0 Gemini搜索能力
+     * 扩展 2.0 Gemini LLM搜索能力
      * @param query
      * @returns {Promise<*>}
      */
-    async extendsSearchQuery(query) {
+    async extendsLLMSearchQuery(query) {
         if (llmCrawlBaseUrl !== '' && isContainsUrl(query)) {
             // 单纯包含了链接
             const llmData = await this.fetchLLMCrawlReq(query);
@@ -396,6 +401,56 @@ export class Gemini extends plugin {
             query += `\n搜索结果：${llmData}`;
         }
         return query;
+    }
+
+    /**
+     * 扩展 2.0 Gemini 自带搜索能力
+     * @param e
+     * @param query
+     * @returns {Promise<*>}
+     */
+    async extendsSearchQuery(e, query) {
+        const modelSelect = e?.isMaster ? masterModel : generalModel;
+        logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
+
+        const completion = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${aiApiKey}`,
+            {
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { text: query }
+                    ]
+                }],
+                tools: [{
+                    googleSearch: {}
+                }]
+            },
+            {
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                timeout: 100000
+            }
+        );
+
+        const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
+        await e.reply(ans, true);
+
+        // 搜索的一些来源
+        const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
+        if (searchChunks !== undefined) {
+            const searchChunksRes = searchChunks.map(item => {
+                const web = item.web;
+                return {
+                    message: { type: "text", text: `📌 网站：${web.title}\n🌍 来源：${web.uri}` || "" },
+                    nickname: e.sender.card || e.user_id,
+                    user_id: e.user_id,
+                };
+            });
+            // 发送搜索来源
+            await e.reply(Bot.makeForwardMsg(searchChunksRes));
+        }
     }
 
     /**
