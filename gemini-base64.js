@@ -308,11 +308,6 @@ export class Gemini extends plugin {
             return;
         }
 
-        // 如果引用的仅是一个文本
-        if (replyMessages.length > 0 && replyMessages?.[0].fileType === "text") {
-            query += `\n引用："${ replyMessages?.[0].url }"`;
-        }
-
         // -- 下方可能返回的值为 { url: '', fileExt: '', fileType: '' }
         // 判断当前模型是什么
         const curModel = e?.isMaster ? masterModel : generalModel;
@@ -434,7 +429,7 @@ export class Gemini extends plugin {
             }
         );
 
-        const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
+        const ans = completion.data.candidates?.[0].content?.parts?.map(item => item?.text || '').join("");
         await e.reply(ans, true);
 
         // 搜索的一些来源
