@@ -319,7 +319,7 @@ export class Gemini extends plugin {
         // 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
         if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix)) && isLLMSearch) {
             query = await this.extendsLLMSearchQuery(query);
-        } else if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix))) {
+        } else if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix)) && curModel === "gemini-2.0-flash-exp") {
             await this.extendsSearchQuery(e, query);
             return true;
         }
