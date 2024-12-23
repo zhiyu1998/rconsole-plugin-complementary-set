@@ -1,3 +1,4 @@
+// 1223更新：恢复 #gemini搜索 指令，现在只有gemini-2.0-flash-exp模型支持搜索
 // 1220更新：适配模型gemini-2.0-flash-thinking-exp-1219
 // 1218更新：(1) 关闭 #gemini搜索 指令 (2)重新开放引用合并转发，但只能读取前2条内容
 // 1217更新：增加上传文件大小限制(可修改)，防止api和服务器资源被滥用。 
@@ -15,8 +16,8 @@ const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
-let masterModel = "gemini-2.0-flash-thinking-exp-1219";
-let generalModel = "gemini-2.0-flash-thinking-exp-1219";
+let masterModel = "gemini-2.0-flash-exp";
+let generalModel = "gemini-2.0-flash-exp";
 // 上传最大文件大小限制(单位:字节)(最大2GB)
 const maxFileSize = 2 * 1024 * 1024 * 1024; // 2GB
 // 每日 8 点 03 分自动清理临时文件
@@ -412,12 +413,10 @@ export class Gemini extends plugin {
 
     if (collection.length === 0) {
       // 判断是否包含 https 链接，或者搜索字段
-      // const curModel = e?.isMaster ? masterModel : generalModel;
-      // 满足 http 链接 | 搜索关键字 并且 是 gemini-2.0-flash-exp即可触发
-      // if ((isContainsUrl(query) || query.trim().startsWith("搜索")) && curModel === "gemini-2.0-flash-exp") {
-      //   await this.extendsSearchQuery(e, query);
-      //   return true;
-      // }
+      if ((isContainsUrl(query) || query.trim().startsWith("搜索"))) {
+        await this.extendsSearchQuery(e, query);
+        return true;
+      }
 
       // 模型选择：主人用主人模型，其他人用通用模型
       const model = this?.e?.isMaster ? masterModel : generalModel;
@@ -577,55 +576,64 @@ export class Gemini extends plugin {
     }
   }
 
-  //   /**
-  //    * 扩展 2.0 Gemini搜索能力
-  //    * @param e
-  //    * @param query
-  //    * @returns {Promise<*>}
-  //    */
-  //   async extendsSearchQuery(e, query) {
-  //     const model = e?.isMaster ? masterModel : generalModel;
-  //     logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ model }`);
+    /**
+     * 扩展 2.0 Gemini搜索能力
+     * @param e
+     * @param query
+     * @returns {Promise<*>}
+     */
+    async extendsSearchQuery(e, query) {
+      const model = e?.isMaster ? masterModel : generalModel;
+      logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ model }`);
 
-  //     const completion = await axios.post(
-  //       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiApiKey}`,
-  //       {
-  //           contents: [{
-  //               parts: [
-  //                   { text: prompt },
-  //                   { text: query }
-  //               ]
-  //           }],
-  //           tools: [{
-  //               googleSearch: {}
-  //           }]
-  //       },
-  //       {
-  //           headers: {
-  //               "Content-Type": "application/json"
-  //           },
-  //           timeout: 100000
-  //       }
-  //   );
+      const completion = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiApiKey}`,
+        {
+            contents: [{
+                parts: [
+                    { text: prompt },
+                    { text: query }
+                ]
+            }],
+            tools: [{
+                googleSearch: {}
+            }]
+        },
+        {
+            headers: {
+                "Content-Type": "application/json"
+            },
+            timeout: 100000
+        }
+    );
+    
+    // 提取最后一个文本内容
+    if (completion.data.candidates?.[0]) {
+      const parts = completion.data.candidates[0].content?.parts;
+      const text = parts?.filter(part => part.text).pop()?.text;
+      if (text) {
+        await e.reply(text, true);
+      }
+    }
 
-  //   const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
-  //   await e.reply(ans, true);
+    // const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
+    // await e.reply(ans, true); // 旧版
 
-  //   // 搜索的一些来源
-  //   const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
-  //   if (searchChunks !== undefined) {
-  //       const searchChunksRes = searchChunks.map(item => {
-  //           const web = item.web;
-  //           return {
-  //               message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
-  //               nickname: e.sender.card || e.user_id,
-  //               user_id: e.user_id,
-  //           };
-  //       });
-  //       // 发送搜索来源
-  //       await e.reply(Bot.makeForwardMsg(searchChunksRes));
-  //   }
-  // }
+    // 搜索的一些来源
+    const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
+    if (searchChunks !== undefined) {
+        const searchChunksRes = searchChunks.map(item => {
+            const web = item.web;
+            return {
+                message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
+                nickname: e.sender.card || e.user_id,
+                user_id: e.user_id,
+            };
+        });
+        // 发送搜索来源
+        await e.reply(Bot.makeForwardMsg(searchChunksRes));
+    }
+  }
 
 
 }
@@ -640,25 +648,25 @@ function getMimeType(filePath) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
-// /**
-//  * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
-//  * @param string
-//  * @returns {boolean}
-//  */
-// function isContainsUrl(string) {
-//     const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
-//     return urlRegex.test(string);
-// }
+/**
+ * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
+ * @param string
+ * @returns {boolean}
+ */
+function isContainsUrl(string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
+    return urlRegex.test(string);
+}
 
-// /**
-//  * 提取字符串中的链接
-//  * @param string
-//  * @returns {*|*[]}
-//  */
-// function extractUrls(string) {
-//     const urlRegex = /(https?:\/\/[^\s]+)/g;
-//     return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
-// }
+/**
+ * 提取字符串中的链接
+ * @param string
+ * @returns {*|*[]}
+ */
+function extractUrls(string) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
+}
 
 const mimeTypes = {
   // 音频
@@ -713,6 +721,7 @@ function getHelpContent() {
   (1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选) #gemini [问题](可选)
   (2) 接地搜索(免费API无法使用)：#gemini接地 [问题]
   (3) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
+  (4) gemini 2.0搜索(目前仅支持gemini-2.0-flash-exp模型)：#gemini搜索 [问题]
   
   当前模型： ${masterModel} (主人)| ${generalModel} (通用)
   
