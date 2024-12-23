@@ -368,7 +368,7 @@ export class Gemini extends plugin {
             }
 
             // 需要保存的变量名字
-            const variablesToPreserve = ['aiApiKey', 'masterModel', 'generalModel', "isLLMSearch", 'llmCrawlBaseUrl'];
+            const variablesToPreserve = ['prompt', 'aiApiKey', 'masterModel', 'generalModel', "isLLMSearch", 'llmCrawlBaseUrl'];
             // 开始替换
             const updatedContent = preserveVariables(newContent, oldContent, variablesToPreserve);
 
