@@ -1,3 +1,4 @@
+// 1223修复BUG：修复了使用 #gemini搜索 后返回的文本不完整的问题。
 // 1223更新：恢复 #gemini搜索 指令，现在只有gemini-2.0-flash-exp模型支持搜索
 // 1220更新：适配模型gemini-2.0-flash-thinking-exp-1219
 // 1218更新：(1) 关闭 #gemini搜索 指令 (2)重新开放引用合并转发，但只能读取前2条内容
@@ -606,11 +607,11 @@ export class Gemini extends plugin {
             timeout: 100000
         }
     );
-    
-    // 提取最后一个文本内容
+
+    // 提取所有文本内容并合并
     if (completion.data.candidates?.[0]) {
       const parts = completion.data.candidates[0].content?.parts;
-      const text = parts?.filter(part => part.text).pop()?.text;
+      const text = parts?.filter(part => part.text).map(part => part.text).join(' ');
       if (text) {
         await e.reply(text, true);
       }
