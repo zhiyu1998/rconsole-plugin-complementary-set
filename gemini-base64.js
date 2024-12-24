@@ -41,6 +41,9 @@ class KeyManager {
         this.apiKeys.forEach(key => {
             this.keyFailureCounts[key] = 0;
         });
+
+        // 添加当前使用的key的追踪
+        this.currentKey = null;
     }
 
     getNextKey() {
@@ -51,6 +54,7 @@ class KeyManager {
             
             // 如果当前key有效就返回
             if (this.isKeyValid(currentKey)) {
+                this.currentKey = currentKey; // 记录当前使用的key
                 return currentKey;
             }
 
@@ -72,14 +76,16 @@ class KeyManager {
     }
 
     // 处理key调用失败
-    handleFailure(key) {
-        this.keyFailureCounts[key]++;
-        if (this.keyFailureCounts[key] >= this.MAX_FAILURES) {
-            logger.warn(`API key ${key.substring(0,4)}... 已失败 ${this.MAX_FAILURES} 次，将被标记为无效`);
-            
-            // 当可用key数量为0时发出警告
-            if (this.getValidKeyCount() === 0) {
-                logger.error('[R插件补集][Gemini] 所有 API key 均已失效');
+    handleFailure() {
+        // 使用当前记录的key
+        if (this.currentKey) {
+            this.keyFailureCounts[this.currentKey]++;
+            if (this.keyFailureCounts[this.currentKey] >= this.MAX_FAILURES) {
+                logger.warn(`API key ${this.currentKey.substring(0,4)}... 已失败 ${this.MAX_FAILURES} 次，将被标记为无效`);
+                
+                if (this.getValidKeyCount() === 0) {
+                    logger.error('[R插件补集][Gemini] 所有 API key 均已失效');
+                }
             }
         }
         return this.getNextKey();
@@ -111,6 +117,11 @@ class KeyManager {
     // 获取当前可用的key数量
     getValidKeyCount() {
         return this.apiKeys.filter(key => this.isKeyValid(key)).length;
+    }
+
+    // 获取当前正在使用的key
+    getCurrentKey() {
+        return this.currentKey;
     }
 }
 
@@ -552,9 +563,9 @@ export class Gemini extends plugin {
             }
         } catch (error) {
             logger.error(`[R插件补集][Gemini] Search API error: ${error.message}`);
-            const newKey = this.keyManager.handleFailure(this.genAI._apiKey);
+            const newKey = this.keyManager.handleFailure();  // 不需要传入key
             this.genAI = new GoogleGenerativeAI(newKey);
-            return this.extendsSearchQuery(e, query); // Retry with new key
+            return this.extendsSearchQuery(e, query);
         }
     }
 
@@ -613,7 +624,7 @@ export class Gemini extends plugin {
                 return '抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。';
             }
 
-            const newKey = this.keyManager.handleFailure(this.genAI._apiKey);
+            const newKey = this.keyManager.handleFailure();  // 不需要传入key
             this.genAI = new GoogleGenerativeAI(newKey);
             return this.fetchGeminiReq(query, contentData);
         }
