@@ -7,7 +7,7 @@ import path from "path";
 const prompt = "请用中文回答问题";
 // 默认查询，也就是你只发送'#gemini'时，默认使用的发送，建议写的通用一些，这样可以使用在不限于video、image、file等
 const defaultQuery = "描述一下内容";
-// ai Key
+// ai Key，支持单个key或用逗号分隔的多个key，多key例如："key1,key2,key3"
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
 const masterModel = "gemini-2.0-flash-exp";
