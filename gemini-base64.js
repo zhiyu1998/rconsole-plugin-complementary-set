@@ -509,8 +509,11 @@ export class Gemini extends plugin {
             const modelSelect = e?.isMaster ? masterModel : generalModel;
             logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
 
+            const curKey = this.keyManager.getNextKey();
+            logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ curKey }`);
+
             const completion = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${this.genAI._apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${curKey}`,
                 {
                     contents: [{
                         parts: [
