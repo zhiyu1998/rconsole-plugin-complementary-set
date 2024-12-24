@@ -517,11 +517,15 @@ export class Gemini extends plugin {
      */
     async extendsSearchQuery(e, query) {
         try {
+            // 判断是否是主人 如果是主人则使用好的模型
             const modelSelect = e?.isMaster ? masterModel : generalModel;
             logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
 
-            const curKey = this.keyManager.getNextKey();
-            // logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ curKey }`);
+            // 获取当前key
+            const curKey = this.keyManager.getCurrentKey();
+            // 加密一下 curKey，使其只显示最后四位其他都是***
+            const encryptedKey = curKey.slice(-4).padStart(curKey.length, '*');
+            logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ encryptedKey }`);
 
             const completion = await axios.post(
                 `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${curKey}`,
