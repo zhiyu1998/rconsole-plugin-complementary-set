@@ -93,7 +93,7 @@ export class OpenAI extends plugin {
         try {
             const response = await axios.get(url, { responseType: 'arraybuffer' });
             await fs.promises.writeFile(outputPath, response.data);
-            logger.info(`文件已成功下载至 ${ outputPath }`);
+            logger.info(`文件已成功下载至 ${outputPath}`);
             return outputPath;
         } catch (error) {
             logger.error('无法下载文件:', error.message);
@@ -323,7 +323,7 @@ export class OpenAI extends plugin {
         for (let [index, replyItem] of replyMessages.entries()) {
             const { url, fileExt, fileType } = replyItem;
             // 如果链接不为空，并且引用的内容不是文本
-            const downloadFileName = path.resolve(`./data/tmp${ index }.${ fileExt }`);
+            const downloadFileName = path.resolve(`./data/tmp${index}.${fileExt}`);
             // 默认如果什么也不发送的查询
             if (fileType === "image") {
                 await this.downloadFile(url, downloadFileName);
@@ -340,7 +340,7 @@ export class OpenAI extends plugin {
                 });
             } else if (fileType === "text") {
                 // 如果是一个文本
-                query += `\n引用："${ url }"`;
+                query += `\n引用："${url}"`;
             }
         }
         // logger.info(query);
@@ -353,11 +353,6 @@ export class OpenAI extends plugin {
             await this.clearTmpMsg(e);
             await this.splitCompletion(e, completion);
             return;
-        }
-
-        // 如果引用的仅是一个文本
-        if (replyMessages.length > 0 && replyMessages?.[0].fileType === "text") {
-            query += `\n引用："${ replyMessages?.[0].url }"`;
         }
 
         const completion = await this.fetchOpenAI(query);
@@ -373,7 +368,7 @@ export class OpenAI extends plugin {
      * @param completion
      * @returns {Promise<void>}
      */
-    async splitCompletion(e,completion) {
+    async splitCompletion(e, completion) {
         // 如果出现搜索再进一步划分
         const contentSplit = completion.split("搜索结果来自：");
         await e.reply(contentSplit[0], true);
@@ -449,7 +444,7 @@ async function toBase64(filePath) {
     try {
         const fileData = await fs.promises.readFile(filePath);
         const base64Data = fileData.toString('base64');
-        return `data:${ getMimeType(filePath) };base64,${ base64Data }`;
+        return `data:${getMimeType(filePath)};base64,${base64Data}`;
     } catch (error) {
         logger.info(error);
     }
