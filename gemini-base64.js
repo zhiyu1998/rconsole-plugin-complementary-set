@@ -521,7 +521,7 @@ export class Gemini extends plugin {
             logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
 
             const curKey = this.keyManager.getNextKey();
-            logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ curKey }`);
+            // logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ curKey }`);
 
             const completion = await axios.post(
                 `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${curKey}`,
