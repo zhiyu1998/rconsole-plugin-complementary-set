@@ -1,8 +1,8 @@
+// 1224更新：使用 #gemini更新 可以更新本文件
 // 1223修复BUG：修复了使用 #gemini搜索 后返回的文本不完整的问题。
 // 1223更新：恢复 #gemini搜索 指令，现在只有gemini-2.0-flash-exp模型支持搜索
 // 1220更新：适配模型gemini-2.0-flash-thinking-exp-1219
-// 1218更新：(1) 关闭 #gemini搜索 指令 (2)重新开放引用合并转发，但只能读取前2条内容
-// 1217更新：增加上传文件大小限制(可修改)，防止api和服务器资源被滥用。 
+// 1218更新：(1) 关闭 #gemini搜索 指令 (2)重新开放引用合并转发，但只能读取前2条内容 
 
 import axios from "axios";
 import fs from "fs";
@@ -33,7 +33,7 @@ export class Gemini extends plugin {
       priority: 1,
       rule: [
         {
-          reg: '^#gemini(?!接地|帮助|设置模型)\\s*.*$',  // 使用否定前瞻(?!pattern)
+          reg: '^#gemini(?!接地|帮助|设置模型|更新)\\s*.*$',  // 使用否定前瞻(?!pattern)
           fnc: 'chat'
         },
         {
@@ -47,6 +47,10 @@ export class Gemini extends plugin {
         {
           reg: '^#gemini设置模型\\s*(.*)\\s*(.*)$',
           fnc: 'setModels'
+        },
+        {
+          reg: '^#gemini更新\\s*.*$',
+          fnc: 'update'
         }
       ],
     });
@@ -397,7 +401,7 @@ export class Gemini extends plugin {
                   await e.reply(text, true);
                 }
               }
-              
+
               // await e.reply(result.response.text(), true); // 旧版本
               resolve();
             } catch (error) {
@@ -425,8 +429,8 @@ export class Gemini extends plugin {
       const geminiModel = this.genAI.getGenerativeModel({ model: model });
       const result = await geminiModel.generateContent([prompt, query]);
 
-        // 有两段text，第一段是思考过程，第二段是回复内容，因此提取最后一个文本内容
-        if (result?.response?.candidates?.[0]) {
+      // 有两段text，第一段是思考过程，第二段是回复内容，因此提取最后一个文本内容
+      if (result?.response?.candidates?.[0]) {
         const parts = result.response.candidates[0].content?.parts;
         const text = parts?.filter(part => part.text).pop()?.text;
         if (text) {
@@ -442,7 +446,7 @@ export class Gemini extends plugin {
   }
 
   /**
-   * 处理合并转发消息 (file api 版本不支持)
+   * 处理合并转发消息
    * @param messages 消息数组
    * @returns {Promise<Array>} 返回处理后的消息数组
    */
@@ -577,35 +581,35 @@ export class Gemini extends plugin {
     }
   }
 
-    /**
-     * 扩展 2.0 Gemini搜索能力
-     * @param e
-     * @param query
-     * @returns {Promise<*>}
-     */
-    async extendsSearchQuery(e, query) {
-      const model = e?.isMaster ? masterModel : generalModel;
-      logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ model }`);
+  /**
+   * 扩展 2.0 Gemini搜索能力
+   * @param e
+   * @param query
+   * @returns {Promise<*>}
+   */
+  async extendsSearchQuery(e, query) {
+    const model = e?.isMaster ? masterModel : generalModel;
+    logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${model}`);
 
-      const completion = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiApiKey}`,
-        {
-            contents: [{
-                parts: [
-                    { text: prompt },
-                    { text: query }
-                ]
-            }],
-            tools: [{
-                googleSearch: {}
-            }]
+    const completion = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiApiKey}`,
+      {
+        contents: [{
+          parts: [
+            { text: prompt },
+            { text: query }
+          ]
+        }],
+        tools: [{
+          googleSearch: {}
+        }]
+      },
+      {
+        headers: {
+          "Content-Type": "application/json"
         },
-        {
-            headers: {
-                "Content-Type": "application/json"
-            },
-            timeout: 100000
-        }
+        timeout: 100000
+      }
     );
 
     // 提取所有文本内容并合并
@@ -623,16 +627,69 @@ export class Gemini extends plugin {
     // 搜索的一些来源
     const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
     if (searchChunks !== undefined) {
-        const searchChunksRes = searchChunks.map(item => {
-            const web = item.web;
-            return {
-                message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
-                nickname: e.sender.card || e.user_id,
-                user_id: e.user_id,
-            };
-        });
-        // 发送搜索来源
-        await e.reply(Bot.makeForwardMsg(searchChunksRes));
+      const searchChunksRes = searchChunks.map(item => {
+        const web = item.web;
+        return {
+          message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
+          nickname: e.sender.card || e.user_id,
+          user_id: e.user_id,
+        };
+      });
+      // 发送搜索来源
+      await e.reply(Bot.makeForwardMsg(searchChunksRes));
+    }
+  }
+
+  //更新
+  async update(e) {
+    if (e?.isMaster === false) {
+      logger.mark("[R插件补集] Gemini 多模态助手：检测到不是主人更新");
+      return false;
+    }
+
+    const giteeUrl = 'https://gitee.com/kyrzy0416/rconsole-plugin-complementary-set/raw/master/gemini.js';
+    const githubUrl = 'https://raw.githubusercontent.com/zhiyu1998/rconsole-plugin-complementary-set/refs/heads/master/gemini.js';
+    try {
+      await this.updateGeminiFile(githubUrl);
+      e.reply('[R插件补集] Gemini 多模态助手更新成功！更新源：GitHub', true);
+    } catch (error) {
+      logger.warn('从 Gitee 更新失败，尝试从 GitHub 更新...');
+      try {
+        await this.updateGeminiFile(giteeUrl);
+        e.reply('[R插件补集] Gemini 多模态助手更新成功！更新源：Gitee', true);
+      } catch (githubError) {
+        logger.error('从 GitHub 更新也失败了，请检查网络连接或链接是否有效。');
+      }
+    }
+  }
+
+  /**
+ * Gemini 更新单文件
+ * @param url
+ * @returns {Promise<void>}
+ */
+  async updateGeminiFile(url) {
+    const localFilePath = path.resolve('./plugins/rconsole-plugin/apps/gemini.js');
+    try {
+      const response = await axios.get(url);
+      let newContent = response.data;
+
+      let oldContent = '';
+      try {
+        oldContent = fs.readFileSync(localFilePath, 'utf8');
+      } catch (err) {
+        logger.warn('未找到旧文件，将使用新内容更新。');
+      }
+
+      // 需要保存的变量名字
+      const variablesToPreserve = ['prompt', 'aiApiKey', 'masterModel', 'generalModel'];
+      // 开始替换
+      const updatedContent = preserveVariables(newContent, oldContent, variablesToPreserve);
+
+      fs.writeFileSync(localFilePath, updatedContent, 'utf8');
+    } catch (error) {
+      logger.error(`下载更新时出错: ${error.message}`);
+      throw error;
     }
   }
 
@@ -655,8 +712,8 @@ function getMimeType(filePath) {
  * @returns {boolean}
  */
 function isContainsUrl(string) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
-    return urlRegex.test(string);
+  const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
+  return urlRegex.test(string);
 }
 
 /**
@@ -665,8 +722,25 @@ function isContainsUrl(string) {
  * @returns {*|*[]}
  */
 function extractUrls(string) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
+}
+
+/**
+ * 保留 aiApiKey 值
+ * @param content    新的版本的数据
+ * @param oldContent 之前版本的数据
+ * @param variables  保留的变量名字
+ * @returns {*}
+ */
+function preserveVariables(content, oldContent, variables) {
+  variables.forEach(variable => {
+    const regex = new RegExp(`const\\s+${variable}\\s*=\\s*\"(.*?)\";`);
+    const match = oldContent.match(regex);
+    const value = match ? match[1] : '';
+    content = content.replace(regex, `const ${variable} = "${value}";`);
+  });
+  return content;
 }
 
 const mimeTypes = {
@@ -723,6 +797,7 @@ function getHelpContent() {
   (2) 接地搜索(免费API无法使用)：#gemini接地 [问题]
   (3) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
   (4) gemini 2.0搜索(目前仅支持gemini-2.0-flash-exp模型)：#gemini搜索 [问题]
+  (5) 更新：#gemini更新
   
   当前模型： ${masterModel} (主人)| ${generalModel} (通用)
   
