@@ -19,6 +19,101 @@ let isLLMSearch = false;
 // 填写你的LLM Crawl 服务器地址，填写后即启用，例如：http://localhost:5000，具体使用方法见：https://github.com/zhiyu1998/rconsole-plugin-complementary-set/tree/master/crawler
 const llmCrawlBaseUrl = "";
 
+class KeyManager {
+    constructor(apiKeys) {
+        // 支持单个key或用逗号分隔的多个key
+        this.apiKeys = Array.isArray(apiKeys) ? apiKeys : apiKeys.split(',').map(k => k.trim());
+        
+        // 验证key是否为空
+        if (!this.apiKeys.length || this.apiKeys.some(key => !key)) {
+            logger.error('[R插件补集][Gemini] API key 不能为空');
+            throw new Error('API key cannot be empty');
+        }
+
+        // 当前使用的key索引
+        this.currentIndex = 0;
+        // 记录每个key的失败次数
+        this.keyFailureCounts = {};
+        // key最大失败次数，超过后会被标记为无效
+        this.MAX_FAILURES = 3;
+
+        // 初始化每个key的失败计数为0
+        this.apiKeys.forEach(key => {
+            this.keyFailureCounts[key] = 0;
+        });
+    }
+
+    getNextKey() {
+        const initialIndex = this.currentIndex;
+        
+        while (true) {
+            const currentKey = this.apiKeys[this.currentIndex];
+            
+            // 如果当前key有效就返回
+            if (this.isKeyValid(currentKey)) {
+                return currentKey;
+            }
+
+            // 轮询下一个key
+            this.currentIndex = (this.currentIndex + 1) % this.apiKeys.length;
+            
+            // 如果已经检查了所有key还是没有找到有效的
+            if (this.currentIndex === initialIndex) {
+                // 重置所有key的失败计数，重新开始
+                this.resetFailureCounts();
+                return currentKey;
+            }
+        }
+    }
+
+    // 检查key是否有效(失败次数未超过阈值)
+    isKeyValid(key) {
+        return this.keyFailureCounts[key] < this.MAX_FAILURES;
+    }
+
+    // 处理key调用失败
+    handleFailure(key) {
+        this.keyFailureCounts[key]++;
+        if (this.keyFailureCounts[key] >= this.MAX_FAILURES) {
+            logger.warn(`API key ${key.substring(0,4)}... 已失败 ${this.MAX_FAILURES} 次，将被标记为无效`);
+            
+            // 当可用key数量为0时发出警告
+            if (this.getValidKeyCount() === 0) {
+                logger.error('[R插件补集][Gemini] 所有 API key 均已失效');
+            }
+        }
+        return this.getNextKey();
+    }
+
+    // 重置所有key的失败计数
+    resetFailureCounts() {
+        Object.keys(this.keyFailureCounts).forEach(key => {
+            this.keyFailureCounts[key] = 0;
+        });
+    }
+
+    // 获取所有key的状态(有效/无效)
+    getKeysStatus() {
+        const validKeys = [];
+        const invalidKeys = [];
+        
+        this.apiKeys.forEach(key => {
+            if (this.isKeyValid(key)) {
+                validKeys.push(key);
+            } else {
+                invalidKeys.push(key);
+            }
+        });
+
+        return { validKeys, invalidKeys };
+    }
+
+    // 获取当前可用的key数量
+    getValidKeyCount() {
+        return this.apiKeys.filter(key => this.isKeyValid(key)).length;
+    }
+}
+
 export class Gemini extends plugin {
     constructor() {
         super({
@@ -43,8 +138,13 @@ export class Gemini extends plugin {
             fnc: () => this.autoCleanTmp(),
             log: false
         };
-        this.genAI = new GoogleGenerativeAI(aiApiKey);
-        // 临时存储消息id，请勿修改
+        try {
+            this.keyManager = new KeyManager(aiApiKey);
+            this.genAI = new GoogleGenerativeAI(this.keyManager.getNextKey());
+        } catch (error) {
+            logger.error('[R插件补集][Gemini] 初始化失败:', error.message);
+            throw error;
+        }
         this.tmpMsgQueue = [];
     }
 
@@ -84,7 +184,7 @@ export class Gemini extends plugin {
             });
 
             if (tmpFiles.length === 0) {
-                logger.info(`[R插件补集][Gemini自动清理临时文件] 暂时没有清理的文件。`);
+                logger.info(`[R插件补集][Gemini自动清理临时文件] 暂时没有需要清理的文件。`);
             }
         });
     }
@@ -158,7 +258,7 @@ export class Gemini extends plugin {
             const replyMsg = await this.getReplyMsg(e);
             // 交互告知用户等待
             const tmpMsg = await e.reply("正在上传引用，请稍候...", true);
-            // 如果存在就暂时存放到队列
+            // 如果存在消息ID，暂时存放到队列
             if (tmpMsg?.data?.message_id) {
                 this.tmpMsgQueue.push(tmpMsg.data.message_id);
             }
@@ -181,7 +281,7 @@ export class Gemini extends plugin {
                     fileType = msg.type;
 
                     if (fileType === "image") {
-                        // 如果是图片，直���获取URL
+                        // 如果是图片，直接获取URL
                         url = msg.data?.url;
                         fileExt = msg.data?.file?.match(/\.(jpg|jpeg|png|gif|webp)(?=\.|$)/i)?.[1] || 'jpg';
                         replyMessages.push({
@@ -405,46 +505,53 @@ export class Gemini extends plugin {
      * @returns {Promise<*>}
      */
     async extendsSearchQuery(e, query) {
-        const modelSelect = e?.isMaster ? masterModel : generalModel;
-        logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
+        try {
+            const modelSelect = e?.isMaster ? masterModel : generalModel;
+            logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
 
-        const completion = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${aiApiKey}`,
-            {
-                contents: [{
-                    parts: [
-                        { text: prompt },
-                        { text: query }
-                    ]
-                }],
-                tools: [{
-                    googleSearch: {}
-                }]
-            },
-            {
-                headers: {
-                    "Content-Type": "application/json"
+            const completion = await axios.post(
+                `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${this.genAI._apiKey}`,
+                {
+                    contents: [{
+                        parts: [
+                            { text: prompt },
+                            { text: query }
+                        ]
+                    }],
+                    tools: [{
+                        googleSearch: {}
+                    }]
                 },
-                timeout: 100000
+                {
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    timeout: 100000
+                }
+            );
+
+            const ans = completion.data.candidates?.[0].content?.parts?.map(item => item?.text || '').join("");
+            await e.reply(ans, true);
+
+            // 搜索的一些来源
+            const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
+            if (searchChunks !== undefined) {
+                const searchChunksRes = searchChunks.map(item => {
+                    const web = item.web;
+                    return {
+                        message: { type: "text", text: `📌 网站：${web.title}\n🌍 来源：${web.uri}` || "" },
+                        nickname: e.sender.card || e.user_id,
+                        user_id: e.user_id,
+                    };
+                });
+                // 发送搜索来源
+                await e.reply(Bot.makeForwardMsg(searchChunksRes));
             }
-        );
-
-        const ans = completion.data.candidates?.[0].content?.parts?.map(item => item?.text || '').join("");
-        await e.reply(ans, true);
-
-        // 搜索的一些来源
-        const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
-        if (searchChunks !== undefined) {
-            const searchChunksRes = searchChunks.map(item => {
-                const web = item.web;
-                return {
-                    message: { type: "text", text: `📌 网站：${web.title}\n🌍 来源：${web.uri}` || "" },
-                    nickname: e.sender.card || e.user_id,
-                    user_id: e.user_id,
-                };
-            });
-            // 发送搜索来源
-            await e.reply(Bot.makeForwardMsg(searchChunksRes));
+        } catch (error) {
+            logger.error(`[R插件补集][Gemini] Search API error: ${error.message}`);
+            const newKey = this.keyManager.handleFailure(this.genAI._apiKey);
+            this.genAI = new GoogleGenerativeAI(newKey);
+            return this.extendsSearchQuery(e, query); // Retry with new key
         }
     }
 
@@ -461,38 +568,52 @@ export class Gemini extends plugin {
     }
 
     async fetchGeminiReq(query, contentData = []) {
-        // 如果是主人就用好的模型，其他群友使用 Flash
-        const modelSelect = this?.e?.isMaster ? masterModel : generalModel;
-        logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
-        // 定义通用的消息内容
-        const client = this.genAI.getGenerativeModel({ model: modelSelect });
-
-        // 如果 query 是字符串，转换为数组
-        const queryArray = Array.isArray(query) ? query : [{ text: query }];
-
-        // 挨个初始化
-        const geminiContentData = [];
-        if (contentData.length > 0) {
-            for (let i = 0; i < contentData.length; i++) {
-                geminiContentData.push(toGeminiInitData(contentData[i]));
+        try {
+            // 如果是主人就用好的模型，其他群友使用 Flash
+            const modelSelect = this?.e?.isMaster ? masterModel : generalModel;
+            logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${modelSelect}`);
+            
+            // 定义通用的消息内容
+            const client = this.genAI.getGenerativeModel({ model: modelSelect });
+            // 如果 query 是字符串，转换为数组
+            const queryArray = Array.isArray(query) ? query : [{ text: query }];
+            // 挨个初始化
+            const geminiContentData = [];
+            
+            if (contentData.length > 0) {
+                for (let i = 0; i < contentData.length; i++) {
+                    geminiContentData.push(toGeminiInitData(contentData[i]));
+                }
             }
+
+            // 构建生成内容数组
+            const contentArray = geminiContentData.length > 0
+                ? [prompt, ...queryArray, ...geminiContentData]
+                : [prompt, ...queryArray];
+
+            // 调用生成接口
+            const result = await client.generateContent(contentArray);
+
+            // 思考模式：有两段text，第一段是思考过程，第二段是回复内容，因此提取最后一个文本内容
+            if (modelSelect.includes("thinking") && result?.response?.candidates?.[0]) {
+                const parts = result.response.candidates[0].content?.parts;
+                return parts?.filter(part => part.text).pop()?.text;
+            }
+            // 返回生成的文本
+            return result.response.text();
+            
+        } catch (error) {
+            logger.error(`[R插件补集][Gemini] Gemini API error: ${error.message}`);
+            
+            // 如果所有key都失效，直接返回错误信息
+            if (this.keyManager.getValidKeyCount() === 0) {
+                return '抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。';
+            }
+
+            const newKey = this.keyManager.handleFailure(this.genAI._apiKey);
+            this.genAI = new GoogleGenerativeAI(newKey);
+            return this.fetchGeminiReq(query, contentData);
         }
-
-        // 构建生成内容数组
-        const contentArray = geminiContentData.length > 0
-            ? [prompt, ...queryArray, ...geminiContentData]
-            : [prompt, ...queryArray];
-
-        // 调用生成接口
-        const result = await client.generateContent(contentArray);
-
-        // 思考模式：有两段text，第一段是思考过程，第二段是回复内容，因此提取最后一个文本内容
-        if (modelSelect.includes("thinking") && result?.response?.candidates?.[0]) {
-            const parts = result.response.candidates[0].content?.parts;
-            return parts?.filter(part => part.text).pop()?.text;
-        }
-        // 返回生成的文本
-        return result.response.text();
     }
 
     /**
