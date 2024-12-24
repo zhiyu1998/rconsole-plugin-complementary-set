@@ -292,7 +292,7 @@ pnpm add @google/generative-ai -w
 
 ~~> ➡️ [点击阅读](./crawler/README.md)~~
 
-7. 增加 Gemini 的反向代理（临时解决方案）
+7. 增加 Gemini 的反向代理（临时解决方案，由群友@Fate提供）
 
 去 cf worker 部署一个反向代理，然后填写到 js 文件中
 
