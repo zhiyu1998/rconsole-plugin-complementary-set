@@ -296,7 +296,7 @@ pnpm add @google/generative-ai -w
 
 去 cf worker 部署一个反向代理，然后填写到 js 文件中
 
-参考js：[gemini-reverse-proxy](./gemini-reverse-proxy/main.py)
+参考js：[gemini-reverse-proxy](./gemini-reverse-proxy/main.js)
 
 需要替换一下`两个部分`：
 1. 你的反代域名
