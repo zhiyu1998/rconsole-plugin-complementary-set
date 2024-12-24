@@ -292,6 +292,32 @@ pnpm add @google/generative-ai -w
 
 ~~> ➡️ [点击阅读](./crawler/README.md)~~
 
+7. 增加 Gemini 的反向代理（临时解决方案）
+
+去 cf worker 部署一个反向代理，然后填写到 js 文件中
+
+参考js：[gemini-reverse-proxy](./gemini-reverse-proxy/main.py)
+
+需要替换一下`两个部分`：
+1. 你的反代域名
+2. 云崽位置
+
+```
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/plugins/rconsole-plugin/apps/gemini.js
+
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/index.js
+
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】node_modules/@google/generative-ai/generative-ai/dist/index.mjs
+
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/src/requests/request.d.ts
+
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/server/index.js
+
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/server/index.mjs
+
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/server/src/requests/request.d.ts
+```
+
 ## 开前缀/at
 
 防止打扰到其他群聊的 I 人插件
