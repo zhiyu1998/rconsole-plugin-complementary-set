@@ -6,7 +6,7 @@ import path from "path";
 // 提示词
 const prompt = "请用中文回答问题";
 // 默认查询，也就是你只发送'#gemini'时，默认使用的发送，建议写的通用一些，这样可以使用在不限于video、image、file等
-const defaultQuery = "描述一下内容";
+const defaultQuery = "使用简短的40字左右描述一下内容";
 // ai Key，支持单个key或用逗号分隔的多个key，多key例如："key1,key2,key3"
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
@@ -23,7 +23,7 @@ class KeyManager {
     constructor(apiKeys) {
         // 支持单个key或用逗号分隔的多个key
         this.apiKeys = Array.isArray(apiKeys) ? apiKeys : apiKeys.split(',').map(k => k.trim());
-        
+
         // 验证key是否为空
         if (!this.apiKeys.length || this.apiKeys.some(key => !key)) {
             logger.error('[R插件补集][Gemini] API key 不能为空');
@@ -48,10 +48,10 @@ class KeyManager {
 
     getNextKey() {
         const initialIndex = this.currentIndex;
-        
+
         while (true) {
             const currentKey = this.apiKeys[this.currentIndex];
-            
+
             // 如果当前key有效就返回
             if (this.isKeyValid(currentKey)) {
                 this.currentKey = currentKey; // 记录当前使用的key
@@ -60,7 +60,7 @@ class KeyManager {
 
             // 轮询下一个key
             this.currentIndex = (this.currentIndex + 1) % this.apiKeys.length;
-            
+
             // 如果已经检查了所有key还是没有找到有效的
             if (this.currentIndex === initialIndex) {
                 // 重置所有key的失败计数，重新开始
@@ -81,8 +81,8 @@ class KeyManager {
         if (this.currentKey) {
             this.keyFailureCounts[this.currentKey]++;
             if (this.keyFailureCounts[this.currentKey] >= this.MAX_FAILURES) {
-                logger.warn(`API key ${this.currentKey.substring(0,4)}... 已失败 ${this.MAX_FAILURES} 次，将被标记为无效`);
-                
+                logger.warn(`API key ${ this.currentKey.substring(0, 4) }... 已失败 ${ this.MAX_FAILURES } 次，将被标记为无效`);
+
                 if (this.getValidKeyCount() === 0) {
                     logger.error('[R插件补集][Gemini] 所有 API key 均已失效');
                 }
@@ -102,7 +102,7 @@ class KeyManager {
     getKeysStatus() {
         const validKeys = [];
         const invalidKeys = [];
-        
+
         this.apiKeys.forEach(key => {
             if (this.isKeyValid(key)) {
                 validKeys.push(key);
@@ -485,7 +485,7 @@ export class Gemini extends plugin {
 
             fs.writeFileSync(localFilePath, updatedContent, 'utf8');
         } catch (error) {
-            logger.error(`下载更新时出错: ${error.message}`);
+            logger.error(`下载更新时出错: ${ error.message }`);
             throw error;
         }
     }
@@ -499,12 +499,12 @@ export class Gemini extends plugin {
         if (llmCrawlBaseUrl !== '' && isContainsUrl(query)) {
             // 单纯包含了链接
             const llmData = await this.fetchLLMCrawlReq(query);
-            query += `\n搜索结果：${llmData}`;
+            query += `\n搜索结果：${ llmData }`;
         } else if (query.trim().startsWith("搜索")) {
             // 需要搜索
-            logger.mark(`[R插件补集][Gemini] 开始搜索：${query.replace("搜索", "")}`);
-            const llmData = await this.fetchLLMCrawlReq(`https://m.sogou.com/web/searchList.jsp?keyword=${query.replace("搜索", "")}`);
-            query += `\n搜索结果：${llmData}`;
+            logger.mark(`[R插件补集][Gemini] 开始搜索：${ query.replace("搜索", "") }`);
+            const llmData = await this.fetchLLMCrawlReq(`https://m.sogou.com/web/searchList.jsp?keyword=${ query.replace("搜索", "") }`);
+            query += `\n搜索结果：${ llmData }`;
         }
         return query;
     }
@@ -528,7 +528,7 @@ export class Gemini extends plugin {
             logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ encryptedKey }`);
 
             const completion = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/${modelSelect}:generateContent?key=${curKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/${ modelSelect }:generateContent?key=${ curKey }`,
                 {
                     contents: [{
                         parts: [
@@ -557,7 +557,7 @@ export class Gemini extends plugin {
                 const searchChunksRes = searchChunks.map(item => {
                     const web = item.web;
                     return {
-                        message: { type: "text", text: `📌 网站：${web.title}\n🌍 来源：${web.uri}` || "" },
+                        message: { type: "text", text: `📌 网站：${ web.title }\n🌍 来源：${ web.uri }` || "" },
                         nickname: e.sender.card || e.user_id,
                         user_id: e.user_id,
                     };
@@ -566,7 +566,7 @@ export class Gemini extends plugin {
                 await e.reply(Bot.makeForwardMsg(searchChunksRes));
             }
         } catch (error) {
-            logger.error(`[R插件补集][Gemini] Search API error: ${error.message}`);
+            logger.error(`[R插件补集][Gemini] Search API error: ${ error.message }`);
             const newKey = this.keyManager.handleFailure();  // 不需要传入key
             this.genAI = new GoogleGenerativeAI(newKey);
             return this.extendsSearchQuery(e, query);
@@ -581,7 +581,7 @@ export class Gemini extends plugin {
     async fetchLLMCrawlReq(query) {
         // 提取 http 链接
         const reqUrl = extractUrls(query)?.[0];
-        const data = await fetch(`${llmCrawlBaseUrl}/crawl?url=${reqUrl}`).then(resp => resp.json());
+        const data = await fetch(`${ llmCrawlBaseUrl }/crawl?url=${ reqUrl }`).then(resp => resp.json());
         return data.data;
     }
 
@@ -589,15 +589,15 @@ export class Gemini extends plugin {
         try {
             // 如果是主人就用好的模型，其他群友使用 Flash
             const modelSelect = this?.e?.isMaster ? masterModel : generalModel;
-            logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${modelSelect}`);
-            
+            logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
+
             // 定义通用的消息内容
             const client = this.genAI.getGenerativeModel({ model: modelSelect });
             // 如果 query 是字符串，转换为数组
             const queryArray = Array.isArray(query) ? query : [{ text: query }];
             // 挨个初始化
             const geminiContentData = [];
-            
+
             if (contentData.length > 0) {
                 for (let i = 0; i < contentData.length; i++) {
                     geminiContentData.push(toGeminiInitData(contentData[i]));
@@ -619,10 +619,10 @@ export class Gemini extends plugin {
             }
             // 返回生成的文本
             return result.response.text();
-            
+
         } catch (error) {
-            logger.error(`[R插件补集][Gemini] Gemini API error: ${error.message}`);
-            
+            logger.error(`[R插件补集][Gemini] Gemini API error: ${ error.message }`);
+
             // 如果所有key都失效，直接返回错误信息
             if (this.keyManager.getValidKeyCount() === 0) {
                 return '抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。';
@@ -746,7 +746,7 @@ function preserveVariables(content, oldContent, variables) {
         const regex = new RegExp(`const\\s+${variable}\\s*=\\s*\"(.*?)\";`);
         const match = oldContent.match(regex);
         const value = match ? match[1] : '';
-        content = content.replace(regex, `const ${variable} = "${value}";`);
+        content = content.replace(regex, `const ${ variable } = "${ value }";`);
     });
     return content;
 }
