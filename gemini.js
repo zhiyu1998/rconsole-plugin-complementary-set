@@ -33,23 +33,23 @@ export class Gemini extends plugin {
       priority: 1,
       rule: [
         {
-          reg: '^#gemini(?!接地|帮助|设置模型|更新)\\s*.*$',  // 使用否定前瞻(?!pattern)
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!接地|帮助|设置模型|更新)\\s*.*$',  // 使用否定前瞻(?!pattern)
           fnc: 'chat'
         },
         {
-          reg: '^#gemini接地\\s*.*$',
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]接地\\s*.*$',
           fnc: 'grounding'
         },
         {
-          reg: '^#gemini帮助\\s*.*$',
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]帮助\\s*.*$',
           fnc: 'gemiHelp'
         },
         {
-          reg: '^#gemini设置模型\\s*(.*)\\s*(.*)$',
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]设置模型\\s*(.*)\\s*(.*)$',
           fnc: 'setModels'
         },
         {
-          reg: '^#gemini更新\\s*.*$',
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]更新\\s*.*$',
           fnc: 'update'
         }
       ],
@@ -80,13 +80,13 @@ export class Gemini extends plugin {
     }
 
     // 检查命令后是否有参数
-    const input = e.msg.replace(/^#gemini设置模型/, '').trim();
+    const input = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]设置模型/, '').trim();
     if (!input) {
       await e.reply('请指定要设置的模型名称\n格式：#gemini设置模型 [主人模型] [通用模型](可选)', true);
       return;
     }
 
-    const match = e.msg.match(/^#gemini设置模型\s+(.+?)(?:\s+(.+))?$/);
+    const match = e.msg.match(/^#[Gg][Ee][Mm][Ii][Nn][Ii]设置模型\s+(.+?)(?:\s+(.+))?$/);
     if (!match) {
       await e.reply('命令格式错误\n格式：#gemini设置模型 [主人模型] [通用模型](可选)', true);
       return;
@@ -327,7 +327,7 @@ export class Gemini extends plugin {
 
   // 多模态功能
   async chat(e) {
-    let query = e.msg.replace(/^#gemini/, '').trim();
+    let query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]/, '').trim();
     const replyMessages = await this.autoGetUrl(e);
     const collection = [];
 
@@ -508,7 +508,7 @@ export class Gemini extends plugin {
 
   //接地搜索功能
   async grounding(e) {
-    const query = e.msg.replace(/^#gemini接地/, '').trim();
+    const query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]接地/, '').trim();
 
     if (!query) {
       await e.reply('请输入有效的问题。', true);
