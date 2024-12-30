@@ -294,28 +294,32 @@ pnpm add @google/generative-ai -w
 
 7. 增加 Gemini 的反向代理（临时解决方案，由群友@Fate提供）
 
-去 cf worker 部署一个反向代理，然后填写到 js 文件中
+前往 CloudFlare 部署一个 Workers 反向代理，部署时候填写下面Workers内容然后绑定域名使用
 
-参考js：[gemini-reverse-proxy](./gemini-reverse-proxy/main.js)
+Workers：[gemini-reverse-proxy](./gemini-reverse-proxy/main.js)
 
 需要替换一下`两个部分`：
 1. 你的反代域名
-2. 云崽位置
+2. Yunzai-Bot目录
 
 ```
-sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/plugins/rconsole-plugin/apps/gemini.js
+替换【Gemini插件】反代接口
 
-sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/index.js
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' /【Yunzai-Bot目录】/plugins/rconsole-plugin/apps/gemini.js
 
-sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】node_modules/@google/generative-ai/generative-ai/dist/index.mjs
+替换【Gemini SDK】反代接口
 
-sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/src/requests/request.d.ts
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' /【Yunzai-Bot目录】/node_modules/@google/generative-ai/dist/index.js
 
-sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/server/index.js
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' /【Yunzai-Bot目录】/node_modules/@google/generative-ai/dist/index.mjs
 
-sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/server/index.mjs
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' /【Yunzai-Bot目录】/node_modules/@google/generative-ai/dist/src/requests/request.d.ts
 
-sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' 【云崽位置】/node_modules/@google/generative-ai/generative-ai/dist/server/src/requests/request.d.ts
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' /【Yunzai-Bot目录】/node_modules/@google/generative-ai/dist/server/index.js
+
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' /【Yunzai-Bot目录】/node_modules/@google/generative-ai/dist/server/index.mjs
+
+sed -i 's|https://generativelanguage.googleapis.com|【你的反代域名】https://generativelanguage.googleapis.com|g' /【Yunzai-Bot目录】/node_modules/@google/generative-ai/dist/server/src/requests/request.d.ts0
 ```
 
 ## 开前缀/at
