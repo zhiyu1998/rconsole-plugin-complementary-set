@@ -54,7 +54,7 @@ class KeyManager {
 
             // 如果当前key有效就返回
             if (this.isKeyValid(currentKey)) {
-                this.currentKey = currentKey; // 记录当前使用的key
+                this.currentKey = currentKey;
                 return currentKey;
             }
 
@@ -63,9 +63,8 @@ class KeyManager {
 
             // 如果已经检查了所有key还是没有找到有效的
             if (this.currentIndex === initialIndex) {
-                // 重置所有key的失败计数，重新开始
-                this.resetFailureCounts();
-                return currentKey;
+                // 不再重置失败计数，而是返回null表示没有可用的key
+                return null;
             }
         }
     }
@@ -77,7 +76,6 @@ class KeyManager {
 
     // 处理key调用失败
     handleFailure() {
-        // 使用当前记录的key
         if (this.currentKey) {
             this.keyFailureCounts[this.currentKey]++;
             if (this.keyFailureCounts[this.currentKey] >= this.MAX_FAILURES) {
@@ -88,7 +86,11 @@ class KeyManager {
                 }
             }
         }
-        return this.getNextKey();
+        const nextKey = this.getNextKey();
+        if (!nextKey) {
+            throw new Error('所有 API key 均已失效');
+        }
+        return nextKey;
     }
 
     // 重置所有key的失败计数
@@ -628,9 +630,14 @@ export class Gemini extends plugin {
                 return '抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。';
             }
 
-            const newKey = this.keyManager.handleFailure();  // 不需要传入key
-            this.genAI = new GoogleGenerativeAI(newKey);
-            return this.fetchGeminiReq(query, contentData);
+            try {
+                const newKey = this.keyManager.handleFailure();
+                this.genAI = new GoogleGenerativeAI(newKey);
+                return this.fetchGeminiReq(query, contentData);
+            } catch (e) {
+                // 捕获 handleFailure 抛出的错误
+                return '抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。';
+            }
         }
     }
 
