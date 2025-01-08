@@ -5,7 +5,7 @@ import puppeteer from "../../../lib/puppeteer/puppeteer.js";
 const queue = new PQueue({ concurrency: 20 });
 
 // TODO 这里需要修改你的QQ号
-const masterId = "";
+const masterId = "1075510949";
 // TODO 是否启动文字版的TODO，防止部分机子无法看到TODO
 let isText = false;
 // TODO 填写你发言后小秘书将在这个时间内不撤回群友发言，默认5分钟（5 x 60 x 1000ms）
@@ -61,7 +61,7 @@ export class Secretary extends plugin {
                 'Content-Type': 'application/json'
             }
         }).then(resp => resp.text());
-        e.reply(`小秘书自动翻译：\n${translateResultResp.split("翻译后：")?.[1] || ""}`, true);
+        e.reply(`${translateResultResp.split("翻译后：")?.[1] || ""}`, true);
     }
 
     // 互联网抽象话翻译
@@ -76,7 +76,7 @@ export class Secretary extends plugin {
             })
         }).then(resp => resp.json());
         const guess = resp?.[0].trans || resp?.[0].inputting;
-        e.reply(`小秘书自动理解抽象语言：\n${Array.isArray(guess) ? guess.join("、") : guess}`, true);
+        e.reply(`${Array.isArray(guess) ? guess.join("、") : guess}`, true);
     }
 
     async withstand(e) {
@@ -206,7 +206,7 @@ function isAllEnglishWithPunctuation(str) {
         return false; // 纯数字直接返回 false
     }
     // 正则表达式匹配英文字母、数字、空格、常见标点符号，以及一些特殊符号
-    const regex = /^[A-Za-z0-9\s.,;:'"()%\-–—!?‘’“”]+$/;
+    const regex = /^(?!\d+$)(?!^[.,;:'"()%\-–—!?‘’“”\s\d]+$)(?!ok$)(?!OK$)(?!^..$)(?:(?!(.)\1{2})[A-Za-z0-9\s.,;:'"()%\-–—!?‘’“”])+$/;
     // 检查字符串不是单独的问号
     return regex.test(str) && str !== '?';
 }
