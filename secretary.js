@@ -207,8 +207,9 @@ function isAllEnglishWithPunctuation(str) {
     }
     // 正则表达式匹配英文字母、数字、空格、常见标点符号，以及一些特殊符号
     const regex = new RegExp(
-    `^(?!\\d+$)(?![.,;:'"()%\\-–—!?‘’“”\\s\\d]+$)(?!ok$|OK$|nb$|yes$|no$|hh$|xx$|ww$|vv$|yy$|oo$|pp$|mc$|emm$|lol$|wyy$|zfb$|wx$|qq$|tx$|wb$|xhs$|dy$|gg$|nt$|sb$|lj$|tt$|fw$|fp$|rnm$|rmb$|cs$|cf$|op$|blbl$|xyz$|cn$|jp$|cnm$|cn$|dnm$|us$|usa$|uk$|tg$|\\.\\.$|qaq$|tat$|orz$|ovo$|emmm$|r\\d{2}$|R\\d{2}$|o\\.o$|owo$|good$|omg$|bad$|god$|apple$|r18g$)(?:(?!(.)\\1{2})[A-Za-z0-9\\s.,;:'"()%\\-–—!?‘’“”])+$`, 'i'
+    `^(?!\\d+$)(?![.,;:'"()%\\-–—!?‘’“”\\s\\d]+$)(?!ok$|OK$|nb$|yes$|no$|hh$|steam$|csgo$|xx$|ww$|vv$|qs$|td$|sgl$|yy$|oo$|pp$|mc$|emm$|lol$|wyy$|zfb$|wx$|qq$|tx$|wb$|cnd$|fnmdp$|wdnmd$|csn$|dnlm$|xhs$|dy$|gg$|nt$|nc$|xbx$|lpl$|kpl$|bl$|gl$|gd$|hb$|xb$|ntm$|wtm$|ctm$|rnd$|nm$|nnd$|nmb$|mmd$|jj$|kk$|dd$|cc$|sb$|lj$|tt$|fw$|fp$|rnm$|rmb$|cs$|cf$|op$|blbl$|xyz$|cn$|jp$|cnm$|cn$|dnm$|us$|usa$|uk$|tg$|\\.\\.$|qaq$|tat$|orz$|ovo$|emmm$|r\\d{2}$|R\\d{2}$|o\\.o$|owo$|good$|omg$|bad$|god$|apple$|r18g$)(?:(?!(.)\\1{2})[A-Za-z0-9\\s.,;:'"()%\\-–—!?‘’“”])+$`, 'i'
   );
+
     // 检查字符串不是单独的问号
     return regex.test(str) && str !== '?';
 }
