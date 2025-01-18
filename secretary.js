@@ -233,7 +233,6 @@ function isAllEnglishWithPunctuation(str) {
     return regex.test(str) && str !== '?';
 }
 
-
 function isSingleWord(str) {
     // 先去掉首尾空格
     str = str.trim();
