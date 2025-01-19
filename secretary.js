@@ -82,6 +82,7 @@ export class Secretary extends plugin {
     async withstand(e) {
         queue.add(async () => {
             // 自主翻译
+            e.msg = e.msg.replace(/[-_]/g, ' ');
             if (e.msg !== undefined && isAllEnglishWithPunctuation(e.msg)) {
                 if (isSingleWord(e.msg)) {
                     await this.canUSpeak(e);
@@ -201,14 +202,33 @@ export class Secretary extends plugin {
 }
 
 function isAllEnglishWithPunctuation(str) {
-    // 先检查字符串是否为纯数字
-    if (/^\d+$/.test(str)) {
-        return false; // 纯数字直接返回 false
+    // 先检查字符串是否为纯数字或计量单位
+    if (/^\d+(?!([bgkmt]|kb|mb|gb)$)/.test(str)) {
+        return false; // 直接返回 false
     }
+    
+    // 检查字符串是否为纯符号
+    if (/^[!"#$%&'()*+,\-.\/:;<=>?@[\]^_`{|}~]+$/.test(str)) {
+        return false; // 纯标点符号返回 false
+    }
+    str = str.replace(/[-_]/g, ' ');
+    
+    // 创建不匹配缩写数组，用户可自行添加修改
+    const words = ['sb', 'cnm', 'ok', 'ba', 'by', 'hd', 'mp3', 'mp4', 'avi', 'av', 'bv', 'gv', 'mp5', 'mp7', 'mkv', 'jpg', 'pdf', 'txt', 'exe', 'exo', 'gif', 'png', 'bt', 'doro', 'OK', 'wc', 'ljt', 'sjb', 'cjb', 'byd', 'bs', 'sd', 'nb', 'yes', 'no', 'hh', 'steam', 'csgo', 'xx', 'ww', 'vv', 'qs', 'td', 'sgl', 'yy', 'oo', 'pp', 'mc', 'emm', 'lol', 'wyy', 'zfb', 'wx', 'qq', 'tx', 'wb', 'cnd', 'fnmdp', 'csn', 'dnlm', 'xhs', 'dy', 'gg', 'nt', 'xbx', 'lpl', 'kpl', 'bl', 'gl', 'hb', 'xb', 'ntm', 'wtm', 'ctm', 'rnd', 'nm', 'nmd', 'jj', 'kk', 'dd', 'cc', 'sb', 'lj', 'tt', 'fw', 'rnm', 'rmb', 'cs', 'cf', 'op', 'blbl', 'xyz', 'cn', 'jp', 'cnm', 'cn', 'dnm', 'us', 'usa', 'uk', 'tg', 'qaq', 'tat', 'orz', 'ovo', 'emmm', 'owo', 'good', 'omg', 'bad', 'god', 'apple', 'r18g', 'o.o', '0.0', 'hhh', 'xxx', 'ooo', 'hhhh', 'nmb', 'mdzz', 'qtmd', 'ff', 'wy', 'lcs', 'vivo', 'oppo'];
+
+    // 将 words 中的所有单词转换为小写
+    const lowerCaseWords = words.map(word => word.toLowerCase());
+    
+    // 将 str 转换为小写
+    const lowerCaseStr = str.toLowerCase();
+
+    if (lowerCaseWords.includes(lowerCaseStr)) {
+        return false;   // 数组匹配直接返回 false
+    }
+
     // 正则表达式匹配英文字母、数字、空格、常见标点符号，以及一些特殊符号
-    const regex = new RegExp(
-    `^(?!\\d+$)(?![.,;:'"()%\\-–—!?‘’“”\\s\\d]+$)(?!ok$|OK$|nb$|yes$|no$|hh$|xx$|ww$|vv$|yy$|oo$|pp$|mc$|emm$|lol$|wyy$|zfb$|wx$|qq$|tx$|wb$|xhs$|dy$|gg$|nt$|sb$|lj$|tt$|fw$|fp$|rnm$|rmb$|cs$|cf$|op$|blbl$|xyz$|cn$|jp$|cnm$|cn$|dnm$|us$|usa$|uk$|tg$|\\.\\.$|qaq$|tat$|orz$|ovo$|emmm$|r\\d{2}$|R\\d{2}$|o\\.o$|owo$|good$|omg$|bad$|god$|apple$|r18g$)(?:(?!(.)\\1{2})[A-Za-z0-9\\s.,;:'"()%\\-–—!?‘’“”])+$`, 'i'
-  );
+    const regex = /^[A-Za-z0-9\s.,;:'"()%\-–—!?‘’“”_]+$/;
+    
     // 检查字符串不是单独的问号
     return regex.test(str) && str !== '?';
 }
