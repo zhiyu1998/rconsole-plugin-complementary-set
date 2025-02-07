@@ -1,13 +1,12 @@
-// 1224更新：使用 #gemini更新 可以更新本文件
-// 1223修复BUG：修复了使用 #gemini搜索 后返回的文本不完整的问题。
-// 1223更新：恢复 #gemini搜索 指令，现在只有gemini-2.0-flash-exp模型支持搜索
-// 1220更新：适配模型gemini-2.0-flash-thinking-exp-1219
-// 1218更新：(1) 关闭 #gemini搜索 指令 (2)重新开放引用合并转发，但只能读取前2条内容 
+// 0207更新：
+// 1.删除了“#gemini搜索”和“#gemini接地”命令，gemini-2.0-flash和gemini-2.0-pro-exp-02-05模型可自动判断是否需要搜索，thinking和lite模型不支持搜索。
+// 2.修复视频和图片无法分析的bug。
+// 3.使用 #gemini帮助 可查看指令。不支持引用合并转发的消息。
 
 import axios from "axios";
 import fs from "fs";
 import path from "path";
-import { GoogleGenerativeAI, DynamicRetrievalMode } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server";
 
 // 提示词
@@ -17,8 +16,8 @@ const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
-let masterModel = "gemini-2.0-flash-exp";
-let generalModel = "gemini-2.0-flash-exp";
+let masterModel = "gemini-2.0-flash";
+let generalModel = "gemini-2.0-flash";
 // 上传最大文件大小限制(单位:字节)(最大2GB)
 const maxFileSize = 2 * 1024 * 1024 * 1024; // 2GB
 // 每日 8 点 03 分自动清理临时文件
@@ -33,12 +32,8 @@ export class Gemini extends plugin {
       priority: 1,
       rule: [
         {
-          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!接地|帮助|设置模型|更新)\\s*.*$',  // 使用否定前瞻(?!pattern)
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!帮助|设置模型|更新)\\s*.*$',  // 使用否定前瞻(?!pattern)
           fnc: 'chat'
-        },
-        {
-          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]接地\\s*.*$',
-          fnc: 'grounding'
         },
         {
           reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]帮助\\s*.*$',
@@ -97,7 +92,6 @@ export class Gemini extends plugin {
     generalModel = newGeneralModel || newMasterModel;
     await e.reply(`模型设置已更新：\n主人模型: ${masterModel}\n通用模型: ${generalModel}`, true);
   }
-
 
 
   /**
@@ -250,7 +244,7 @@ export class Gemini extends plugin {
               "file_id": file_id
             });
             url = latestFileUrl.data.url;
-            fileExt = await this.extractFileExtension(msg.data?.file_id);
+            fileExt = await this.extractFileExtension(msg.data?.file);
             replyMessages.push({
               url,
               fileExt,
@@ -259,7 +253,7 @@ export class Gemini extends plugin {
           } else if (fileType === "video") {
             // 如果是一个视频
             url = msg.data?.path;
-            fileExt = await this.extractFileExtension(msg.data?.file_id);
+            fileExt = await this.extractFileExtension(msg.data?.file);
             replyMessages.push({
               url,
               fileExt,
@@ -304,7 +298,7 @@ export class Gemini extends plugin {
       if (msg.type === "image") {
         replyMessages.push({
           url: msg.data?.url,
-          fileExt: await this.extractFileExtension(msg.data?.file_id),
+          fileExt: await this.extractFileExtension(msg.data?.file),
           fileType: "image"
         });
       }
@@ -361,8 +355,21 @@ export class Gemini extends plugin {
 
         // 模型选择：主人用主人模型，其他人用通用模型
         const model = this?.e?.isMaster ? masterModel : generalModel;
-        // 初始化 model
-        const geminiModel = this.genAI.getGenerativeModel({ model: model });
+
+        // 初始化 model，根据模型名称决定是否添加搜索工具
+        const geminiModel = this.genAI.getGenerativeModel(
+          {
+            model: model,
+            tools: (model.toLowerCase().includes("thinking") || model.toLowerCase().includes("lite"))
+              ? []
+              : [
+                {
+                  googleSearch: {},
+                },
+              ],
+          },
+          { apiVersion: "v1beta" },
+        );
 
         await new Promise((resolve, reject) => {
           setTimeout(async () => {
@@ -401,8 +408,6 @@ export class Gemini extends plugin {
                   await e.reply(text, true);
                 }
               }
-
-              // await e.reply(result.response.text(), true); // 旧版本
               resolve();
             } catch (error) {
               logger.error('处理文件时出错:', error);
@@ -417,16 +422,23 @@ export class Gemini extends plugin {
     }
 
     if (collection.length === 0) {
-      // 判断是否包含 https 链接，或者搜索字段
-      if ((isContainsUrl(query) || query.trim().startsWith("搜索"))) {
-        await this.extendsSearchQuery(e, query);
-        return true;
-      }
-
       // 模型选择：主人用主人模型，其他人用通用模型
       const model = this?.e?.isMaster ? masterModel : generalModel;
-      // 初始化 model
-      const geminiModel = this.genAI.getGenerativeModel({ model: model });
+      // 初始化 model，根据模型名称决定是否添加搜索工具
+      const geminiModel = this.genAI.getGenerativeModel(
+        {
+          model: model,
+          tools: (model.toLowerCase().includes("thinking") || model.toLowerCase().includes("lite"))
+            ? []
+            : [
+              {
+                googleSearch: {},
+              },
+            ],
+        },
+        { apiVersion: "v1beta" },
+      );
+      // 生成内容
       const result = await geminiModel.generateContent([prompt, query]);
 
       // 有两段text，第一段是思考过程，第二段是回复内容，因此提取最后一个文本内容
@@ -437,7 +449,24 @@ export class Gemini extends plugin {
           await e.reply(text, true);
         }
       }
-      // await e.reply(result.response.text(), true); // 旧版本
+      // 提取引用源信息
+      const groundingChunks = result.response.candidates[0].groundingMetadata?.groundingChunks;
+      if (groundingChunks?.length > 0) {
+        const forwardMessages = groundingChunks
+          .filter(chunk => chunk.web?.title && chunk.web?.uri)
+          .map((chunk, index) => ({
+            message: {
+              type: "text",
+              text: `来源 ${index + 1}:\n网站: ${chunk.web.title}\n链接: ${chunk.web.uri}`
+            },
+            nickname: e.sender.card || e.user_id,
+            user_id: e.user_id,
+          }));
+
+        if (forwardMessages.length > 0) {
+          await e.reply(Bot.makeForwardMsg(forwardMessages));
+        }
+      }
     }
 
     // 清理临时消息
@@ -506,140 +535,6 @@ export class Gemini extends plugin {
   }
 
 
-  //接地搜索功能
-  async grounding(e) {
-    const query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]接地/, '').trim();
-
-    if (!query) {
-      await e.reply('请输入有效的问题。', true);
-      return;
-    }
-    // 模型选择：主人用主人模型，其他人用通用模型
-    const model = this?.e?.isMaster ? masterModel : generalModel;
-
-    try {
-      const geminiModelodel = this.genAI.getGenerativeModel(
-        {
-          model: model,
-          tools: [
-            {
-              googleSearchRetrieval: {
-                dynamicRetrievalConfig: {
-                  mode: DynamicRetrievalMode.MODE_DYNAMIC,
-                  dynamicThreshold: 0.5, // 阈值：在 API 请求中，您可以指定带有阈值的动态检索配置。阈值是一个介于 [0,1] 范围内的浮点值，默认为 0.7。如果阈值为零，则回答始终依托 Google 搜索进行接地。
-                },
-              },
-            },
-          ],
-        },
-        { apiVersion: "v1beta" },
-      );
-
-      const result = await geminiModelodel.generateContent([prompt + query]);
-
-      if (result?.response?.candidates?.[0]) {
-        // 提取最后一个文本内容
-        if (result?.response?.candidates?.[0]) {
-          const parts = result.response.candidates[0].content?.parts;
-          const text = parts?.filter(part => part.text).pop()?.text;
-          if (text) {
-            await e.reply(text, true);
-          }
-        }
-
-        // 提取引用源信息
-        const groundingChunks = result.response.candidates[0].groundingMetadata?.groundingChunks;
-        if (groundingChunks?.length > 0) {
-          const forwardMessages = groundingChunks
-            .filter(chunk => chunk.web?.title && chunk.web?.uri)
-            .map((chunk, index) => ({
-              message: {
-                type: "text",
-                text: `来源 ${index + 1}:\n标题: ${chunk.web.title}\n链接: ${chunk.web.uri}`
-              },
-              nickname: e.sender.card || e.user_id,
-              user_id: e.user_id,
-            }));
-
-          if (forwardMessages.length > 0) {
-            await e.reply(Bot.makeForwardMsg(forwardMessages));
-          }
-        }
-      } else {
-        await e.reply('无法处理您的请求。', true);
-      }
-
-    } catch (error) {
-      console.error(`Gemini API 错误: ${error.message}`, error);
-
-      if (error.response) {
-        console.error(`API 响应状态: ${error.response.status}`);
-        await e.reply(`API 错误: ${error.response.statusText}`, true);
-      } else {
-        await e.reply('处理请求时发生错误。', true);
-      }
-    }
-  }
-
-  /**
-   * 扩展 2.0 Gemini搜索能力
-   * @param e
-   * @param query
-   * @returns {Promise<*>}
-   */
-  async extendsSearchQuery(e, query) {
-    const model = e?.isMaster ? masterModel : generalModel;
-    logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${model}`);
-
-    const completion = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiApiKey}`,
-      {
-        contents: [{
-          parts: [
-            { text: prompt },
-            { text: query }
-          ]
-        }],
-        tools: [{
-          googleSearch: {}
-        }]
-      },
-      {
-        headers: {
-          "Content-Type": "application/json"
-        },
-        timeout: 100000
-      }
-    );
-
-    // 提取所有文本内容并合并
-    if (completion.data.candidates?.[0]) {
-      const parts = completion.data.candidates[0].content?.parts;
-      const text = parts?.filter(part => part.text).map(part => part.text).join(' ');
-      if (text) {
-        await e.reply(text, true);
-      }
-    }
-
-    // const ans = completion.data.candidates?.[0].content?.parts?.[0]?.text;
-    // await e.reply(ans, true); // 旧版
-
-    // 搜索的一些来源
-    const searchChunks = completion.data.candidates?.[0].groundingMetadata?.groundingChunks;
-    if (searchChunks !== undefined) {
-      const searchChunksRes = searchChunks.map(item => {
-        const web = item.web;
-        return {
-          message: { type: "text", text: `📌 网站${web.title}\n🌍 来源：${web.uri}` || "" },
-          nickname: e.sender.card || e.user_id,
-          user_id: e.user_id,
-        };
-      });
-      // 发送搜索来源
-      await e.reply(Bot.makeForwardMsg(searchChunksRes));
-    }
-  }
-
   //更新
   async update(e) {
     if (e?.isMaster === false) {
@@ -706,25 +601,6 @@ function getMimeType(filePath) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
-/**
- * 使用正则表达式来判断字符串中是否包含一个 http 或 https 的链接
- * @param string
- * @returns {boolean}
- */
-function isContainsUrl(string) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g; // 匹配 http 或 https 开头的链接
-  return urlRegex.test(string);
-}
-
-/**
- * 提取字符串中的链接
- * @param string
- * @returns {*|*[]}
- */
-function extractUrls(string) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  return string.match(urlRegex) || []; // 如果没有匹配，返回空数组
-}
 
 /**
  * 保留 aiApiKey 值
@@ -793,11 +669,9 @@ function getHelpContent() {
     .join('\n  ');
 
   return `指令：
-  (1) 多模态助手：[引用文件/引用文字/引用图片/图片](可选) #gemini [问题](可选)
-  (2) 接地搜索(免费API无法使用)：#gemini接地 [问题]
-  (3) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
-  (4) gemini 2.0搜索(目前仅支持gemini-2.0-flash-exp模型)：#gemini搜索 [问题]
-  (5) 更新：#gemini更新
+  (1) 多模态助手：[引用文件/文字/图片](可选) #gemini [问题](可选)
+  (2) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
+  (3) 更新：#gemini更新
   
   当前模型： ${masterModel} (主人)| ${generalModel} (通用)
   
