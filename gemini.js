@@ -1,8 +1,5 @@
-// 0207更新：
-// 1.删除了“#gemini搜索”和“#gemini接地”命令，gemini-2.0-flash和gemini-2.0-pro-exp-02-05模型可自动判断是否需要搜索，thinking和lite模型不支持搜索。
-// 2.修复视频和图片无法分析的bug。
-// 3.使用 #gemini帮助 可查看指令。不支持引用合并转发的消息。
-// 4.增加 #gemini修改备注 功能，使用 #gemini帮助 可以查看备注。可以把长模型名称放到备注里避免忘记。
+// 0208更新：
+// 1. 删除了备注功能，使用 #gemini帮助 可查看所有可用模型。
 
 import axios from "axios";
 import fs from "fs";
@@ -23,13 +20,6 @@ let generalModel = "gemini-2.0-flash";
 const maxFileSize = 2 * 1024 * 1024 * 1024; // 2GB
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
-// 备注功能
-let note = `
-gemini-2.0-flash
-gemini-2.0-pro-exp-02-05
-gemini-2.0-flash-thinking-exp-01-21
-gemini-2.0-flash-lite-preview-02-05
-`
 
 export class Gemini extends plugin {
   constructor() {
@@ -40,7 +30,7 @@ export class Gemini extends plugin {
       priority: 1,
       rule: [
         {
-          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!帮助|设置模型|设置备注|更新)\\s*.*$',  // 使用否定前瞻(?!pattern)
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!帮助|设置模型|更新)\\s*.*$',  // 使用否定前瞻(?!pattern)
           fnc: 'chat'
         },
         {
@@ -55,10 +45,6 @@ export class Gemini extends plugin {
           reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]更新\\s*.*$',
           fnc: 'update'
         },
-        {
-          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]设置备注\\s*.*$',
-          fnc: 'remark'
-        }
       ],
     });
     this.task = {
@@ -76,25 +62,16 @@ export class Gemini extends plugin {
 
   // gemini帮助
   async gemiHelp(e) {
-    await e.reply(getHelpContent(), true);
+    let helpText = getHelpContent();
+    try {
+      const models = await getGeminiModels(aiApiKey);
+      helpText += models.join('\n');
+    } catch (error) {
+      helpText += '模型列表获取失败';
+    }
+    await e.reply(helpText, true);
   }
 
-  // 备注功能
-  async remark(e) {
-    if (!e.isMaster) {
-      await e.reply('只有主人才能修改备注', true);
-      return;
-    }
-    const matches = e.msg.match(/^#[Gg][Ee][Mm][Ii][Nn][Ii]设置备注([\s\S]*)$/);
-    const newNote = matches ? matches[1].trim() : '';
-    if (!newNote) {
-      await e.reply('请输入新的备注内容', true);
-      return;
-    }
-    // 更新全局的备注变量
-    note = newNote;
-    await e.reply('备注修改成功，请使用 #gemini帮助 查看', true);
-  }
 
   //模型修改功能 
   async setModels(e) {
@@ -606,7 +583,7 @@ export class Gemini extends plugin {
       }
 
       // 需要保存的变量名字
-      const variablesToPreserve = ['prompt', 'aiApiKey', 'masterModel', 'generalModel','note'];
+      const variablesToPreserve = ['prompt', 'aiApiKey', 'masterModel', 'generalModel'];
       // 开始替换
       const updatedContent = preserveVariables(newContent, oldContent, variablesToPreserve);
 
@@ -646,6 +623,23 @@ function preserveVariables(content, oldContent, variables) {
     content = content.replace(regex, `const ${variable} = "${value}";`);
   });
   return content;
+}
+
+// 获取模型列表
+async function getGeminiModels(apiKey) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+  try {
+    const response = await axios.get(url);
+    const models = response.data.models;
+    if (models && Array.isArray(models)) {
+      return models.map(model => model.name);
+    } else {
+      throw new Error('未获取到模型数据');
+    }
+  } catch (error) {
+    console.error('请求错误：', error);
+    throw error;
+  }
 }
 
 const mimeTypes = {
@@ -692,21 +686,14 @@ const mimeTypes = {
 
 // 获取帮助内容
 function getHelpContent() {
-  // 将 mimeTypes 对象转换为易读的字符串
-  const mimeTypesString = Object.entries(mimeTypes)
-    .map(([ext, mime]) => `${ext}: ${mime}`)
-    .join('\n  ');
-
   return `指令：
   (1) 多模态助手：[引用文件/文字/图片](可选) #gemini [问题](可选)
   (2) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
   (3) 更新：#gemini更新
-  (4) 设置备注：#gemini设置备注 [备注内容]
-  (5) 帮助：#gemini帮助, 可以查看当前备注和当前模型。
+  (4) 帮助：#gemini帮助, 可以查看当前模型和所有可用模型。
   
   当前模型： ${masterModel} (主人)| ${generalModel} (通用)
-  
-  备注：
-  ${note}
-  `;
+
+  可用模型：
+`;
 }
