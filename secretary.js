@@ -82,7 +82,6 @@ export class Secretary extends plugin {
     async withstand(e) {
         queue.add(async () => {
             // 自主翻译
-            e.msg = e.msg.replace(/[-_]/g, ' ');
             if (e.msg !== undefined && isAllEnglishWithPunctuation(e.msg)) {
                 if (isSingleWord(e.msg)) {
                     await this.canUSpeak(e);
