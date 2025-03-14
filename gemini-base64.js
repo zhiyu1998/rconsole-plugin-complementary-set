@@ -12,6 +12,8 @@ const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
 const masterModel = "gemini-2.0-flash-exp";
 const generalModel = "gemini-2.0-flash-exp";
+// 绘画使用的模型，目前只有 gemini-2.0-flash-exp 可用
+const paintModel = "gemini-2.0-flash-exp";
 // 每日 8 点 03 分自动清理临时文件
 const CLEAN_CRON = "3 8 * * *";
 // 是否使用LLM Crawl，默认使用 Gemini 默认搜索
@@ -430,6 +432,9 @@ export class Gemini extends plugin {
         } else if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix)) && curModel === "gemini-2.0-flash-exp") {
             await this.extendsSearchQuery(e, query);
             return true;
+        } else if (["画图", "绘图", "画画"].some(prefix => query.trim().startsWith(prefix))) {
+            await this.extendsPaint(e, query);
+            return true;
         }
 
         // 请求 Gemini
@@ -573,6 +578,61 @@ export class Gemini extends plugin {
             this.genAI = new GoogleGenerativeAI(newKey);
             return this.extendsSearchQuery(e, query);
         }
+    }
+
+    /**
+     * 扩展 Gemini 的画图能力
+     * @param e
+     * @param query
+     * @returns {Promise<void>}
+     */
+    async extendsPaint(e, query) {
+        // 获取当前key
+        const curKey = this.keyManager.getCurrentKey();
+        // 加密一下 curKey，使其只显示最后四位其他都是***
+        const encryptedKey = curKey.slice(-4).padStart(curKey.length, '*');
+        logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ encryptedKey }`);
+
+        const completion = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/${ paintModel }:generateContent?key=${ curKey }`,
+            {
+                contents: [{
+                    parts: [
+                        { text: query }
+                    ]
+                }],
+                generation_config: {
+                    response_modalities: [
+                        "Text",
+                        "Image"
+                    ]
+                }
+            },
+            {
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                timeout: 100000
+            }
+        );
+
+        const ans = completion.data?.candidates?.[0]?.content?.parts;
+        if (!ans) {
+            e.reply("请重试或者换一个 key 尝试", true);
+        }
+
+        let texts = "";
+        let image = "";
+        ans.forEach(item => {
+            if (item?.text) {
+                texts += item.text + "\n";
+            } else if (item.inlineData && item.inlineData.data) {
+                image = "data:image/png;base64," + item.inlineData.data;
+            }
+        })
+
+        await e.reply(texts);
+        await e.reply(segment.image(image), true);
     }
 
     /**
