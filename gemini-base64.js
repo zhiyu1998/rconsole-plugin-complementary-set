@@ -621,18 +621,16 @@ export class Gemini extends plugin {
             e.reply("请重试或者换一个 key 尝试", true);
         }
 
-        let texts = "";
-        let image = "";
+        let finalReply = [];
         ans.forEach(item => {
             if (item?.text) {
-                texts += item.text + "\n";
+                finalReply.push(item.text + "\n");
             } else if (item.inlineData && item.inlineData.data) {
-                image = "data:image/png;base64," + item.inlineData.data;
+                finalReply.push(segment.image("data:image/png;base64," + item.inlineData.data));
             }
         })
 
-        await e.reply(texts);
-        await e.reply(segment.image(image), true);
+        await e.reply(finalReply, true);
     }
 
     /**
