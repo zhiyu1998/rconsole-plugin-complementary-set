@@ -1,5 +1,5 @@
-// 0208更新：
-// 1. 删除了备注功能，使用 #gemini帮助 可查看所有可用模型。
+// 0315更新：
+// 1. 新增gemini文生图功能： #gemini绘图 + 内容。
 
 import axios from "axios";
 import fs from "fs";
@@ -14,8 +14,10 @@ const defaultQuery = "描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
-let masterModel = "gemini-2.0-flash";
-let generalModel = "gemini-2.0-flash";
+let masterModel = "gemini-2.0-flash-exp";
+let generalModel = "gemini-2.0-flash-exp";
+// 绘画使用的模型，目前只有 gemini-2.0-flash-exp 可用
+const paintModel = "gemini-2.0-flash-exp";
 // 上传最大文件大小限制(单位:字节)(最大2GB)
 const maxFileSize = 2 * 1024 * 1024 * 1024; // 2GB
 // 每日 8 点 03 分自动清理临时文件
@@ -29,22 +31,26 @@ export class Gemini extends plugin {
       event: 'message',
       priority: 1,
       rule: [
-        {
-          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!帮助|设置模型|更新)\\s*.*$',  // 使用否定前瞻(?!pattern)
-          fnc: 'chat'
-        },
-        {
-          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]帮助\\s*.*$',
-          fnc: 'gemiHelp'
-        },
-        {
-          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]设置模型\\s*(.*)\\s*(.*)$',
-          fnc: 'setModels'
-        },
-        {
-          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]更新\\s*.*$',
-          fnc: 'update'
-        },
+      {
+        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!帮助|设置模型|更新|绘图)\\s*.*$',  // 使用否定前瞻(?!pattern)
+        fnc: 'chat'
+      },
+      {
+        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]帮助\\s*.*$',
+        fnc: 'gemiHelp'
+      },
+      {
+        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]设置模型\\s*(.*)\\s*(.*)$',
+        fnc: 'setModels'
+      },
+      {
+        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]更新\\s*.*$',
+        fnc: 'update'
+      },
+      {
+        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]绘图(\\s+.*)?$',
+        fnc: 'extendsPaint'
+      },
       ],
     });
     this.task = {
@@ -540,6 +546,54 @@ export class Gemini extends plugin {
     }];
   }
 
+  /**
+       * 扩展 Gemini 的画图能力
+       * @param e
+       * @param query
+       * @returns {Promise<void>}
+       */
+  async extendsPaint(e) {
+    let query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]绘图/, '').trim();
+    const completion = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${paintModel}:generateContent?key=${aiApiKey}`,
+      {
+        contents: [{
+          parts: [
+            { text: query }
+          ]
+        }],
+        generation_config: {
+          response_modalities: [
+            "Text",
+            "Image"
+          ]
+        }
+      },
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        timeout: 100000
+      }
+    );
+
+    const ans = completion.data?.candidates?.[0]?.content?.parts;
+    if (!ans) {
+      e.reply("请重试或者换一个 key 尝试", true);
+    }
+
+    let finalReply = [];
+    ans.forEach(item => {
+      if (item?.text) {
+        finalReply.push(item.text + "\n");
+      } else if (item.inlineData && item.inlineData.data) {
+        finalReply.push(segment.image("data:image/png;base64," + item.inlineData.data));
+      }
+    })
+
+    await e.reply(finalReply, true);
+  }
+
 
   //更新
   async update(e) {
@@ -691,9 +745,10 @@ function getHelpContent() {
   (2) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
   (3) 更新：#gemini更新
   (4) 帮助：#gemini帮助, 可以查看当前模型和所有可用模型。
+  (5) 文生图：#gemini绘图 [内容]
   
-  当前模型： ${masterModel} (主人)| ${generalModel} (通用)
+  当前模型： ${masterModel} (主人) | ${generalModel} (通用) | ${paintModel} (绘图)
 
-  可用模型：
+  所有模型：
 `;
 }
