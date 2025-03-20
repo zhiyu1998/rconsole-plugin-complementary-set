@@ -1,3 +1,5 @@
+// 0320更新：
+// 1. 修复分析视频时报Invalid URL错误的BUG。
 // 0315更新：
 // 1. 新增gemini文生图功能： #gemini绘图 + 内容。
 
@@ -264,7 +266,7 @@ export class Gemini extends plugin {
             });
           } else if (fileType === "video") {
             // 如果是一个视频
-            url = msg.data?.path;
+            url = msg.data?.url;
             fileExt = await this.extractFileExtension(msg.data?.file);
             replyMessages.push({
               url,
