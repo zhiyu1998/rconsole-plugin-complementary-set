@@ -1,7 +1,7 @@
 // 0320更新：
-// 1. 修复分析视频时报Invalid URL错误的BUG。
-// 0315更新：
-// 1. 新增gemini文生图功能： #gemini绘图 + 内容。
+// 1. 扩展 #gemini绘图 指令：
+// (1) 文生图：#gemini绘图 + [文本]
+// (2) 图生图：[图片/引用图片] + #gemini绘图 + [文本]
 
 import axios from "axios";
 import fs from "fs";
@@ -33,26 +33,26 @@ export class Gemini extends plugin {
       event: 'message',
       priority: 1,
       rule: [
-      {
-        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!帮助|设置模型|更新|绘图)\\s*.*$',  // 使用否定前瞻(?!pattern)
-        fnc: 'chat'
-      },
-      {
-        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]帮助\\s*.*$',
-        fnc: 'gemiHelp'
-      },
-      {
-        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]设置模型\\s*(.*)\\s*(.*)$',
-        fnc: 'setModels'
-      },
-      {
-        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]更新\\s*.*$',
-        fnc: 'update'
-      },
-      {
-        reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]绘图(\\s+.*)?$',
-        fnc: 'extendsPaint'
-      },
+        {
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii](?!帮助|设置模型|更新|绘图)\\s*.*$',  // 使用否定前瞻(?!pattern)
+          fnc: 'chat'
+        },
+        {
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]帮助\\s*.*$',
+          fnc: 'gemiHelp'
+        },
+        {
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]设置模型\\s*(.*)\\s*(.*)$',
+          fnc: 'setModels'
+        },
+        {
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]更新\\s*.*$',
+          fnc: 'update'
+        },
+        {
+          reg: '^#[Gg][Ee][Mm][Ii][Nn][Ii]绘图(\\s+.*)?$',
+          fnc: 'extendsPaint'
+        },
       ],
     });
     this.task = {
@@ -549,39 +549,53 @@ export class Gemini extends plugin {
   }
 
   /**
-       * 扩展 Gemini 的画图能力
-       * @param e
-       * @param query
-       * @returns {Promise<void>}
-       */
+   * 扩展 Gemini 的画图能力
+   * @param e
+   * @returns {Promise<void>}
+   */
   async extendsPaint(e) {
-    let query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]绘图/, '').trim();
-    const completion = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${paintModel}:generateContent?key=${aiApiKey}`,
-      {
-        contents: [{
-          parts: [
-            { text: query }
-          ]
-        }],
-        generation_config: {
-          response_modalities: [
-            "Text",
-            "Image"
-          ]
-        }
-      },
-      {
-        headers: {
-          "Content-Type": "application/json"
-        },
-        timeout: 100000
+    const query = e.msg.replace(/^#[Gg][Ee][Mm][Ii][Nn][Ii]绘图/, '').trim();
+    const replyMessages = await this.autoGetUrl(e);
+    let contents = [{ text: query }]; // 默认仅使用文本描述
+    
+    // 根据回复消息，优先处理图片资源
+    for (let [index, replyItem] of replyMessages.entries()) {
+      if (index >= 1) break;
+      const { url, fileExt, fileType } = replyItem;
+      if (fileType === "image") {
+        const downloadFileName = path.resolve(`./data/tmp${index}.${fileExt}`);
+        await this.downloadFile(url, downloadFileName, true);
+        const imageData = fs.readFileSync(downloadFileName);
+        const base64Image = imageData.toString('base64');
+        contents = [
+          { text: query },
+          {
+            inlineData: {
+              mimeType: getMimeType(downloadFileName),
+              data: base64Image
+            }
+          }
+        ];
+      } else if (fileType === "text") {
+        // 如果是文本，则直接把引用内容追加到描述中
+        contents = [{ text: query + "\n引用：" + url }];
       }
-    );
+    }
 
-    const ans = completion.data?.candidates?.[0]?.content?.parts;
+    const genAI = new GoogleGenerativeAI(aiApiKey);
+    // 配置 responseModalities 包含 "Image"，以便模型能生成图像
+    const model = genAI.getGenerativeModel({
+      model: paintModel,
+      generationConfig: {
+        responseModalities: ['Text', 'Image']
+      },
+    });
+
+    const response = await model.generateContent(contents);
+    const ans = response.response.candidates[0].content.parts;
     if (!ans) {
-      e.reply("请重试或者换一个 key 尝试", true);
+      await e.reply("请重试或者换一个 key 尝试", true);
+      return;
     }
 
     let finalReply = [];
@@ -591,11 +605,10 @@ export class Gemini extends plugin {
       } else if (item.inlineData && item.inlineData.data) {
         finalReply.push(segment.image("data:image/png;base64," + item.inlineData.data));
       }
-    })
+    });
 
     await e.reply(finalReply, true);
   }
-
 
   //更新
   async update(e) {
@@ -698,6 +711,7 @@ async function getGeminiModels(apiKey) {
   }
 }
 
+
 const mimeTypes = {
   // 音频
   '.wav': 'audio/wav',
@@ -743,11 +757,11 @@ const mimeTypes = {
 // 获取帮助内容
 function getHelpContent() {
   return `指令：
-  (1) 多模态助手：[引用文件/文字/图片](可选) #gemini [问题](可选)
-  (2) 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
-  (3) 更新：#gemini更新
-  (4) 帮助：#gemini帮助, 可以查看当前模型和所有可用模型。
-  (5) 文生图：#gemini绘图 [内容]
+  1 多模态助手：[引用文件/文字/图片](可选) #gemini [问题](可选)
+  2 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
+  3 更新：#gemini更新
+  4 帮助：#gemini帮助, 可以查看当前模型和所有模型。
+  5 绘图模式：(1) 文生图：#gemini绘图 [内容] (2) 图生图：[图片/引用图片] #gemini绘图 [内容]
   
   当前模型： ${masterModel} (主人) | ${generalModel} (通用) | ${paintModel} (绘图)
 
