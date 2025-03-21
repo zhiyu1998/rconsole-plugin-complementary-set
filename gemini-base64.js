@@ -416,11 +416,16 @@ export class Gemini extends plugin {
 
         // 如果是有图像数据的
         if (collection.length > 0) {
+            // 这里如果包含画图就截断一下，截断让Gemini可以图生图
+            if (["画图", "绘图", "绘画", "画画"].some(prefix => query.trim().startsWith(prefix))) {
+                await this.extendsPaint(e, query, collection);
+                return true;
+            }
             const completion = await this.fetchGeminiReq(query || defaultQuery, collection);
             // 这里统一处理撤回消息，表示已经处理完成
             await this.clearTmpMsg(e);
             await e.reply(completion, true);
-            return;
+            return true;
         }
 
         // -- 下方可能返回的值为 { url: '', fileExt: '', fileType: '' }
@@ -432,7 +437,7 @@ export class Gemini extends plugin {
         } else if (["搜索", "检索", "给我"].some(prefix => query.trim().startsWith(prefix)) && curModel === "gemini-2.0-flash-exp") {
             await this.extendsSearchQuery(e, query);
             return true;
-        } else if (["画图", "绘图", "画画"].some(prefix => query.trim().startsWith(prefix))) {
+        } else if (["画图", "绘图", "绘画", "画画"].some(prefix => query.trim().startsWith(prefix))) {
             await this.extendsPaint(e, query);
             return true;
         }
@@ -584,39 +589,41 @@ export class Gemini extends plugin {
      * 扩展 Gemini 的画图能力
      * @param e
      * @param query
+     * @param contentData
      * @returns {Promise<void>}
      */
-    async extendsPaint(e, query) {
+    async extendsPaint(e, query, contentData = []) {
         // 获取当前key
         const curKey = this.keyManager.getCurrentKey();
         // 加密一下 curKey，使其只显示最后四位其他都是***
         const encryptedKey = curKey.slice(-4).padStart(curKey.length, '*');
         logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ encryptedKey }`);
 
-        const completion = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/${ paintModel }:generateContent?key=${ curKey }`,
-            {
-                contents: [{
-                    parts: [
-                        { text: query }
-                    ]
-                }],
-                generation_config: {
-                    response_modalities: [
-                        "Text",
-                        "Image"
-                    ]
-                }
+        // 配置 responseModalities 包含 "Image"，以便模型能生成图像
+        const model = this.genAI.getGenerativeModel({
+            model: paintModel,
+            generationConfig: {
+                responseModalities: ['Text', 'Image']
             },
-            {
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                timeout: 100000
+        });
+
+        // 挨个初始化
+        const geminiContentData = [];
+
+        if (contentData.length > 0) {
+            for (let i = 0; i < contentData.length; i++) {
+                geminiContentData.push(toGeminiInitData(contentData[i]));
             }
+        }
+
+        const completion = await model.generateContent(
+            [
+                { text: query },
+                ...geminiContentData
+            ]
         );
 
-        const ans = completion.data?.candidates?.[0]?.content?.parts;
+        const ans = completion?.response?.candidates?.[0]?.content?.parts;
         if (!ans) {
             e.reply("请重试或者换一个 key 尝试", true);
         }
