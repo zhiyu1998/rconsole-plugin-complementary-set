@@ -1,7 +1,5 @@
-// 0320更新：
-// 1. 扩展 #gemini绘图 指令：
-// (1) 文生图：#gemini绘图 + [文本]
-// (2) 图生图：[图片/引用图片] + #gemini绘图 + [文本]
+// 0523更新：
+// 1.增加gemini识别url的功能。#gemini + (内容 + url)
 
 import axios from "axios";
 import fs from "fs";
@@ -12,12 +10,12 @@ import { GoogleAIFileManager, FileState } from "@google/generative-ai/server";
 // 提示词
 const prompt = "请用中文回答问题";
 // 默认查询，也就是你只发送'#gemini'时，默认使用的发送，建议写的通用一些，这样可以使用在不限于video、image、file等
-const defaultQuery = "描述一下内容";
+const defaultQuery = "用中文描述一下内容";
 // ai Key
 const aiApiKey = "";
 // ai 模型，masterModel -- 主人专用模型，generalModel -- 通用模型，其他群友使用的模型
-let masterModel = "gemini-2.0-flash-exp";
-let generalModel = "gemini-2.0-flash-exp";
+let masterModel = "gemini-2.0-flash";
+let generalModel = "gemini-2.0-flash";
 // 绘画使用的模型，目前只有 gemini-2.0-flash-exp 可用
 const paintModel = "gemini-2.0-flash-exp";
 // 上传最大文件大小限制(单位:字节)(最大2GB)
@@ -240,6 +238,7 @@ export class Gemini extends plugin {
         // 遍历消息数组寻找第一个有用的元素
         for (const msg of messages) {
           fileType = msg.type;
+          console.log("获取到的fileType为", fileType);
 
           if (fileType === "image") {
             // 如果是图片，直接获取URL
@@ -370,17 +369,10 @@ export class Gemini extends plugin {
         // 模型选择：主人用主人模型，其他人用通用模型
         const model = this?.e?.isMaster ? masterModel : generalModel;
 
-        // 初始化 model，根据模型名称决定是否添加搜索工具
+        // 初始化 model
         const geminiModel = this.genAI.getGenerativeModel(
           {
             model: model,
-            tools: (model.toLowerCase().includes("thinking") || model.toLowerCase().includes("lite"))
-              ? []
-              : [
-                {
-                  googleSearch: {},
-                },
-              ],
           },
           { apiVersion: "v1beta" },
         );
@@ -438,17 +430,11 @@ export class Gemini extends plugin {
     if (collection.length === 0) {
       // 模型选择：主人用主人模型，其他人用通用模型
       const model = this?.e?.isMaster ? masterModel : generalModel;
-      // 初始化 model，根据模型名称决定是否添加搜索工具
+      // 初始化 model，带搜索工具，带读取url。
       const geminiModel = this.genAI.getGenerativeModel(
         {
           model: model,
-          tools: (model.toLowerCase().includes("thinking") || model.toLowerCase().includes("lite"))
-            ? []
-            : [
-              {
-                googleSearch: {},
-              },
-            ],
+          tools: [{urlContext: {}}, {googleSearch: {}}],
         },
         { apiVersion: "v1beta" },
       );
@@ -463,7 +449,7 @@ export class Gemini extends plugin {
           await e.reply(text, true);
         }
       }
-      // 提取引用源信息
+      // 提取引用源信息1 (搜索时)
       const groundingChunks = result.response.candidates[0].groundingMetadata?.groundingChunks;
       if (groundingChunks?.length > 0) {
         const forwardMessages = groundingChunks
@@ -481,6 +467,23 @@ export class Gemini extends plugin {
           await e.reply(Bot.makeForwardMsg(forwardMessages));
         }
       }
+
+      // 提取引用源信息2 （提供url时）
+      const urlContextMetadata = result.response.candidates[0].url_context_metadata?.url_metadata;
+      if (urlContextMetadata?.length > 0) {
+        const forwardMessages = urlContextMetadata.map((chunk, index) => ({
+          message: {
+        type: "text",
+        text: `来源 ${index + 1}:\nURL: ${chunk.retrieved_url}\n状态: ${chunk.url_retrieval_status}`
+          },
+          nickname: e.sender.card || e.user_id,
+          user_id: e.user_id,
+        }));
+        if (forwardMessages.length > 0) {
+          await e.reply(Bot.makeForwardMsg(forwardMessages));
+        }
+      }
+
     }
 
     // 清理临时消息
@@ -560,7 +563,7 @@ export class Gemini extends plugin {
     
     // 根据回复消息，优先处理图片资源
     for (let [index, replyItem] of replyMessages.entries()) {
-      if (index >= 1) break;
+      if (index >= 2) break;
       const { url, fileExt, fileType } = replyItem;
       if (fileType === "image") {
         const downloadFileName = path.resolve(`./data/tmp${index}.${fileExt}`);
@@ -757,11 +760,13 @@ const mimeTypes = {
 // 获取帮助内容
 function getHelpContent() {
   return `指令：
-  1 多模态助手：[引用文件/文字/图片](可选) #gemini [问题](可选)
-  2 设置模型：#gemini设置模型 [主人模型] [通用模型](可选，留空则用相同模型)
-  3 更新：#gemini更新
-  4 帮助：#gemini帮助, 可以查看当前模型和所有模型。
-  5 绘图模式：(1) 文生图：#gemini绘图 [内容] (2) 图生图：[图片/引用图片] #gemini绘图 [内容]
+  1 多模态助手：(引用文件/引用文字/引用图片/引用视频/引用音频/图片/空) + #gemini + (内容/内容 + url)
+    p.s. 如果仅使用 #gemini + (内容/内容 + url)， 则可能会自动调用搜索工具。
+  2 设置模型：#gemini设置模型 + 主人模型 + (通用模型/空)
+    p.s. 如果通用模型为空，则通用模型会和主人模型一致。
+  3 绘图模式：文生图/图生图：（引用图片/图片/空） + #gemini绘图 + 内容
+  4 更新：#gemini更新
+  5 帮助：#gemini帮助, 可以查看当前模型和所有模型。
   
   当前模型： ${masterModel} (主人) | ${generalModel} (通用) | ${paintModel} (绘图)
 
