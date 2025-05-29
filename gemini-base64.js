@@ -581,7 +581,7 @@ export class Gemini extends plugin {
             }
         } catch (error) {
             logger.error(`[R插件补集][Gemini] Search API error: ${ error.message }`);
-            
+
             // 如果所有key都失效，直接返回错误信息
             if (this.keyManager.getValidKeyCount() === 0) {
                 await e.reply('抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。', true);
@@ -653,18 +653,21 @@ export class Gemini extends plugin {
             }
 
             let finalReply = [];
-            ans.forEach(item => {
-                if (item?.text) {
-                    finalReply.push(item.text + "\n");
-                } else if (item.inline_data && item.inline_data.data) {
-                    finalReply.push(segment.image("data:image/png;base64," + item.inline_data.data));
+            for (const part of ans) {
+                // Based on the part type, either show the text or save the image
+                if (part.text) {
+                    finalReply.push(part.text + "\n");
+                } else if (part.inlineData) {
+                    const imageData = part.inlineData.data;
+                    const buffer = Buffer.from(imageData, "base64");
+                    finalReply.push(segment.image(buffer));
                 }
-            })
+            }
 
             await e.reply(finalReply, true);
         } catch (error) {
             logger.error(`[R插件补集][Gemini] Paint API error: ${ error.message }`);
-            
+
             // 如果所有key都失效，直接返回错误信息
             if (this.keyManager.getValidKeyCount() === 0) {
                 await e.reply('抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。', true);
@@ -674,7 +677,7 @@ export class Gemini extends plugin {
             try {
                 this.keyManager.handleFailure();
                 return this.extendsPaint(e, query, contentData);
-            } catch (e) {
+            } catch (err) {
                 // 捕获 handleFailure 抛出的错误
                 await e.reply('抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。', true);
             }
