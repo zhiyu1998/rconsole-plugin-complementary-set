@@ -1,8 +1,9 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import fs from "fs";
 import path from "path";
 
+// API 基础地址，可根据需要更换为代理地址
+const apiBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
 // 提示词
 const prompt = "请用中文回答问题";
 // 默认查询，也就是你只发送'#gemini'时，默认使用的发送，建议写的通用一些，这样可以使用在不限于video、image、file等
@@ -155,7 +156,6 @@ export class Gemini extends plugin {
         };
         try {
             this.keyManager = new KeyManager(aiApiKey);
-            this.genAI = new GoogleGenerativeAI(this.keyManager.getNextKey());
         } catch (error) {
             logger.error('[R插件补集][Gemini] 初始化失败:', error.message);
             throw error;
@@ -540,7 +540,7 @@ export class Gemini extends plugin {
             logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ encryptedKey }`);
 
             const completion = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/${ modelSelect }:generateContent?key=${ curKey }`,
+                `${ apiBaseUrl }/models/${ modelSelect }:generateContent?key=${ curKey }`,
                 {
                     contents: [{
                         parts: [
@@ -550,6 +550,8 @@ export class Gemini extends plugin {
                     }],
                     tools: [{
                         googleSearch: {}
+                    }, {
+                        url_context: {}
                     }]
                 },
                 {
@@ -579,9 +581,20 @@ export class Gemini extends plugin {
             }
         } catch (error) {
             logger.error(`[R插件补集][Gemini] Search API error: ${ error.message }`);
-            const newKey = this.keyManager.handleFailure();  // 不需要传入key
-            this.genAI = new GoogleGenerativeAI(newKey);
-            return this.extendsSearchQuery(e, query);
+            
+            // 如果所有key都失效，直接返回错误信息
+            if (this.keyManager.getValidKeyCount() === 0) {
+                await e.reply('抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。', true);
+                return;
+            }
+
+            try {
+                this.keyManager.handleFailure();
+                return this.extendsSearchQuery(e, query);
+            } catch (err) {
+                // 捕获 handleFailure 抛出的错误
+                await e.reply('抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。', true);
+            }
         }
     }
 
@@ -593,51 +606,79 @@ export class Gemini extends plugin {
      * @returns {Promise<void>}
      */
     async extendsPaint(e, query, contentData = []) {
-        // 获取当前key
-        const curKey = this.keyManager.getCurrentKey();
-        // 加密一下 curKey，使其只显示最后四位其他都是***
-        const encryptedKey = curKey.slice(-4).padStart(curKey.length, '*');
-        logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ encryptedKey }`);
+        try {
+            // 获取当前key
+            const curKey = this.keyManager.getCurrentKey();
+            // 加密一下 curKey，使其只显示最后四位其他都是***
+            const encryptedKey = curKey.slice(-4).padStart(curKey.length, '*');
+            logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ encryptedKey }`);
 
-        // 配置 responseModalities 包含 "Image"，以便模型能生成图像
-        const model = this.genAI.getGenerativeModel({
-            model: paintModel,
-            generationConfig: {
-                responseModalities: ['Text', 'Image']
-            },
-        });
+            // 挨个初始化
+            const geminiContentData = [];
 
-        // 挨个初始化
-        const geminiContentData = [];
+            if (contentData.length > 0) {
+                for (let i = 0; i < contentData.length; i++) {
+                    geminiContentData.push(toGeminiInitData(contentData[i]));
+                }
+            }
 
-        if (contentData.length > 0) {
-            for (let i = 0; i < contentData.length; i++) {
-                geminiContentData.push(toGeminiInitData(contentData[i]));
+            // 构建请求内容
+            const requestBody = {
+                contents: [{
+                    parts: [
+                        { text: query },
+                        ...geminiContentData
+                    ]
+                }],
+                generationConfig: {
+                    responseModalities: ['TEXT', 'IMAGE']
+                }
+            };
+
+            const completion = await axios.post(
+                `${ apiBaseUrl }/models/${ paintModel }:generateContent?key=${ curKey }`,
+                requestBody,
+                {
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    timeout: 100000
+                }
+            );
+
+            const ans = completion?.data?.candidates?.[0]?.content?.parts;
+            if (!ans) {
+                e.reply("请重试或者换一个 key 尝试", true);
+                return;
+            }
+
+            let finalReply = [];
+            ans.forEach(item => {
+                if (item?.text) {
+                    finalReply.push(item.text + "\n");
+                } else if (item.inline_data && item.inline_data.data) {
+                    finalReply.push(segment.image("data:image/png;base64," + item.inline_data.data));
+                }
+            })
+
+            await e.reply(finalReply, true);
+        } catch (error) {
+            logger.error(`[R插件补集][Gemini] Paint API error: ${ error.message }`);
+            
+            // 如果所有key都失效，直接返回错误信息
+            if (this.keyManager.getValidKeyCount() === 0) {
+                await e.reply('抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。', true);
+                return;
+            }
+
+            try {
+                this.keyManager.handleFailure();
+                return this.extendsPaint(e, query, contentData);
+            } catch (e) {
+                // 捕获 handleFailure 抛出的错误
+                await e.reply('抱歉，当前所有 API key 均已失效，请稍后再试或联系管理员。', true);
             }
         }
-
-        const completion = await model.generateContent(
-            [
-                { text: query },
-                ...geminiContentData
-            ]
-        );
-
-        const ans = completion?.response?.candidates?.[0]?.content?.parts;
-        if (!ans) {
-            e.reply("请重试或者换一个 key 尝试", true);
-        }
-
-        let finalReply = [];
-        ans.forEach(item => {
-            if (item?.text) {
-                finalReply.push(item.text + "\n");
-            } else if (item.inlineData && item.inlineData.data) {
-                finalReply.push(segment.image("data:image/png;base64," + item.inlineData.data));
-            }
-        })
-
-        await e.reply(finalReply, true);
     }
 
     /**
@@ -658,8 +699,12 @@ export class Gemini extends plugin {
             const modelSelect = this?.e?.isMaster ? masterModel : generalModel;
             logger.mark(`[R插件补集][Gemini] 当前使用的模型为：${ modelSelect }`);
 
-            // 定义通用的消息内容
-            const client = this.genAI.getGenerativeModel({ model: modelSelect });
+            // 获取当前key
+            const curKey = this.keyManager.getCurrentKey();
+            // 加密一下 curKey，使其只显示最后四位其他都是***
+            const encryptedKey = curKey.slice(-4).padStart(curKey.length, '*');
+            logger.mark(`[R插件补集][Gemini] 当前使用的key为：${ encryptedKey }`);
+
             // 如果 query 是字符串，转换为数组
             const queryArray = Array.isArray(query) ? query : [{ text: query }];
             // 挨个初始化
@@ -672,20 +717,39 @@ export class Gemini extends plugin {
             }
 
             // 构建生成内容数组
-            const contentArray = geminiContentData.length > 0
-                ? [prompt, ...queryArray, ...geminiContentData]
-                : [prompt, ...queryArray];
+            const parts = geminiContentData.length > 0
+                ? [{ text: prompt }, ...queryArray, ...geminiContentData]
+                : [{ text: prompt }, ...queryArray];
+
+            // 构建请求体
+            const requestBody = {
+                contents: [{
+                    parts: parts
+                }],
+                tools: [{
+                    url_context: {}
+                }]
+            };
 
             // 调用生成接口
-            const result = await client.generateContent(contentArray);
+            const result = await axios.post(
+                `${ apiBaseUrl }/models/${ modelSelect }:generateContent?key=${ curKey }`,
+                requestBody,
+                {
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    timeout: 100000
+                }
+            );
 
             // 思考模式：有两段text，第一段是思考过程，第二段是回复内容，因此提取最后一个文本内容
-            if (modelSelect.includes("thinking") && result?.response?.candidates?.[0]) {
-                const parts = result.response.candidates[0].content?.parts;
+            if (modelSelect.includes("thinking") && result?.data?.candidates?.[0]) {
+                const parts = result.data.candidates[0].content?.parts;
                 return parts?.filter(part => part.text).pop()?.text;
             }
             // 返回生成的文本
-            return result.response.text();
+            return result.data.candidates?.[0]?.content?.parts?.map(part => part.text).join('') || '生成内容为空';
 
         } catch (error) {
             logger.error(`[R插件补集][Gemini] Gemini API error: ${ error.message }`);
@@ -696,8 +760,7 @@ export class Gemini extends plugin {
             }
 
             try {
-                const newKey = this.keyManager.handleFailure();
-                this.genAI = new GoogleGenerativeAI(newKey);
+                this.keyManager.handleFailure();
                 return this.fetchGeminiReq(query, contentData);
             } catch (e) {
                 // 捕获 handleFailure 抛出的错误
@@ -779,9 +842,9 @@ function toGeminiInitData(filePath) {
     const mimeType = mimeTypes[ext] || 'application/octet-stream';
 
     return {
-        inlineData: {
+        inline_data: {
             data: Buffer.from(fileData).toString("base64"),
-            mimeType
+            mime_type: mimeType
         },
     };
 }
