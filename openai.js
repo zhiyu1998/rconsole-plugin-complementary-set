@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import config from "../model/config.js";
 
-const prompt = "请用中文回答问题";
+const prompt = "模拟在群里呆了20年的热心大佬，擅长使用各种工具、搜索网页以及帮助群友解决问题。请用中文回答问题,回答尽量简洁明了，禁止使用markdown语法。";
 // 默认查询，建议写的通用一些，这样可以使用在不限于video、image、file等
 const defaultQuery = "描述一下内容";
 // base URL
@@ -12,8 +12,19 @@ const openaiBaseURL = "";
 const openaiApiKey = "";
 // 模型
 const openaiModel = "";
-// 每日 8 点 06 分自动清理临时文件
+
+// === 生图配置（与聊天配置独立） ===
+// 生图模型
+const imageGenModel = "gpt-image-2";
+// 生图 base URL（留空则复用聊天配置）
+const imageGenBaseURL = "";
+// 生图 API Key（留空则复用聊天配置）
+const imageGenApiKey = "";
+
+// 每日 8 点 06 分自动清理临时文件和对话记录
 const CLEAN_CRON = "6 8 * * *";
+// 每个用户最多保留的对话历史轮数（1轮 = 1条用户消息 + 1条助手回复）
+const MAX_HISTORY_ROUNDS = 10;
 
 export class OpenAI extends plugin {
     constructor() {
@@ -23,6 +34,10 @@ export class OpenAI extends plugin {
             event: 'message',
             priority: 5001,
             rule: [
+                {
+                    reg: /^#生图[\s\S]+/,
+                    fnc: 'generateImage'
+                },
                 {
                     reg: /^[^#][sS]*/,
                     fnc: 'chat'
@@ -46,6 +61,12 @@ export class OpenAI extends plugin {
         this.model = openaiModel || this.toolsConfig.aiModel;
         // 临时存储消息id，请勿修改
         this.tmpMsgQueue = [];
+        // 对话历史记录 Map<userId, Array<{role, content}>>
+        this.chatHistory = new Map();
+        // 生图配置（优先级：代码顶部 > 聊天配置回退）
+        this.imageGenBaseURL = imageGenBaseURL || this.baseURL;
+        this.imageGenApiKey = imageGenApiKey || this.headers["Authorization"]?.replace("Bearer ", "") || "";
+        this.imageGenModel = imageGenModel || "gpt-image-2";
     }
 
     /**
@@ -53,6 +74,13 @@ export class OpenAI extends plugin {
      * @returns {Promise<void>}
      */
     async autoCleanTmp() {
+        // 清理对话历史记录
+        const historySize = this.chatHistory.size;
+        if (historySize > 0) {
+            this.chatHistory.clear();
+            logger.info(`[R插件补集][OpenAI] 已清理 ${historySize} 个用户的对话历史记录`);
+        }
+
         const fullPath = path.resolve("./data");
 
         // 检查目录是否存在
@@ -314,6 +342,7 @@ export class OpenAI extends plugin {
         }
 
         let query = e.msg.trim();
+        const userId = String(e.user_id);
 
         // 自动判断是否有引用文件和图片
         const replyMessages = await this.autoGetUrl(e);
@@ -343,22 +372,183 @@ export class OpenAI extends plugin {
                 query += `\n引用："${url}"`;
             }
         }
-        // logger.info(query);
-        // logger.info(collection);
 
         // 如果是有图像数据的
         if (collection.length > 0) {
-            const completion = await this.fetchOpenAI(query || defaultQuery, collection);
+            const completion = await this.fetchOpenAI(userId, query || defaultQuery, collection);
             // 这里统一处理撤回消息，表示已经处理完成
             await this.clearTmpMsg(e);
             await this.splitCompletion(e, completion);
             return;
         }
 
-        const completion = await this.fetchOpenAI(query);
+        const completion = await this.fetchOpenAI(userId, query);
         // 这里统一处理撤回消息，示已经处理完成
         await this.clearTmpMsg(e);
         await this.splitCompletion(e, completion);
+        return true;
+    }
+
+    /**
+     * 生图功能：#生图 <prompt>
+     * 支持文生图（/v1/images/generations）和图生图/编辑（/v1/images/edits）
+     * 当用户引用了包含图片的消息时，自动使用图生图编辑模式
+     * @param e
+     * @returns {Promise<boolean>}
+     */
+    async generateImage(e) {
+        // 提取 #生图 后面的 prompt 文本
+        const promptText = e.msg.replace(/^#生图\s*/, "").trim();
+        if (!promptText) {
+            await e.reply("请在 #生图 后输入图片描述，例如：#生图 一只穿宇航服的猫在月球散步");
+            return false;
+        }
+
+        // 检查是否引用了包含图片的消息（图生图 / 编辑模式）
+        let editImages = [];
+        if (e.reply_id !== undefined) {
+            try {
+                const replyItems = await this.autoGetUrl(e);
+                for (const item of replyItems) {
+                    if (item.fileType === "image" && item.url) {
+                        editImages.push(item);
+                    }
+                }
+                // 清理 autoGetUrl 产生的临时消息
+                await this.clearTmpMsg(e);
+            } catch (err) {
+                logger.warn(`[OpenAI][生图] 获取引用图片失败: ${err.message}`);
+            }
+        }
+
+        const isEditMode = editImages.length > 0;
+        const modeText = isEditMode ? "图生图" : "文生图";
+        await e.reply(`🎨 正在${modeText}，请稍候...`, true);
+
+        // 生图最大重试次数
+        const MAX_RETRIES = 2;
+        let lastError = null;
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const base = this.imageGenBaseURL.replace(/\/+$/, "");
+                let url, headers, body;
+
+                if (isEditMode) {
+                    // ====== 图生图 / 编辑模式：/v1/images/edits + FormData ======
+                    const endpoint = base.endsWith("/v1") ? "/images/edits" : "/v1/images/edits";
+                    url = `${base}${endpoint}`;
+
+                    const formData = new FormData();
+                    formData.append("model", this.imageGenModel);
+                    formData.append("prompt", promptText);
+                    formData.append("quality", "medium");
+                    formData.append("size", "1024x1024");
+
+                    // 下载引用的图片并添加到 FormData
+                    for (let i = 0; i < editImages.length; i++) {
+                        const img = editImages[i];
+                        const tmpPath = path.resolve(`./data/tmp_edit_${Date.now()}_${i}.${img.fileExt || "png"}`);
+                        await this.downloadFile(img.url, tmpPath);
+                        const imgBuffer = await fs.promises.readFile(tmpPath);
+                        const mimeType = getMimeType(tmpPath);
+                        const imgBlob = new Blob([imgBuffer], { type: mimeType });
+                        formData.append("image[]", imgBlob, `reference_${i}.${img.fileExt || "png"}`);
+                        fs.unlink(tmpPath, () => {});
+                    }
+
+                    // FormData 模式：不要设置 Content-Type，让 fetch 自动设置 multipart boundary
+                    headers = {
+                        "Authorization": "Bearer " + this.imageGenApiKey
+                    };
+                    body = formData;
+                } else {
+                    // ====== 文生图模式：/v1/images/generations + JSON ======
+                    const endpoint = base.endsWith("/v1") ? "/images/generations" : "/v1/images/generations";
+                    url = `${base}${endpoint}`;
+
+                    headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + this.imageGenApiKey
+                    };
+                    body = JSON.stringify({
+                        model: this.imageGenModel,
+                        prompt: promptText,
+                        n: 1,
+                        size: "1024x1024",
+                        quality: "medium",
+                        response_format: "b64_json"
+                    });
+                }
+
+                logger.info(`[OpenAI][生图] 第${attempt}次请求 | 模式: ${modeText} | 模型: ${this.imageGenModel} | prompt: ${promptText.slice(0, 100)}`);
+
+                // 超时设为 10 分钟（600 秒），避免代理 504
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers,
+                    body,
+                    timeout: 600000
+                });
+
+                const rawText = await response.text();
+                if (!response.ok) {
+                    throw new Error(`生图请求失败(${response.status}): ${rawText.slice(0, 500)}`);
+                }
+
+                // 解析响应 JSON
+                let result;
+                try {
+                    result = JSON.parse(rawText);
+                } catch {
+                    throw new Error(`生图响应解析失败: ${rawText.slice(0, 500)}`);
+                }
+
+                const imageData = result?.data?.[0];
+                if (!imageData) {
+                    throw new Error("生图响应中未找到图片数据");
+                }
+
+                // 获取图片 buffer
+                let imgBuffer;
+                if (imageData.b64_json) {
+                    imgBuffer = Buffer.from(imageData.b64_json, "base64");
+                } else if (imageData.url) {
+                    // 如果返回的是 URL，下载图片
+                    const imgResp = await axios.get(imageData.url, { responseType: "arraybuffer" });
+                    imgBuffer = imgResp.data;
+                } else {
+                    throw new Error("生图响应中未找到图片数据（无 b64_json 和 url）");
+                }
+
+                // 保存临时图片文件
+                const tmpImgPath = path.resolve(`./data/tmp_img_${Date.now()}.png`);
+                await fs.promises.writeFile(tmpImgPath, imgBuffer);
+
+                // 发送图片给用户
+                await e.reply(segment.image(tmpImgPath));
+
+                // 清理临时文件
+                fs.unlink(tmpImgPath, () => {});
+
+                logger.info(`[OpenAI][生图] 完成 | 模式: ${modeText} | 临时文件: ${tmpImgPath}`);
+                return true; // 成功，直接返回
+            } catch (error) {
+                lastError = error;
+                logger.warn(`[OpenAI][生图] 第${attempt}次请求失败: ${error.message || error}`);
+
+                // 如果还有重试次数，等待后重试
+                if (attempt < MAX_RETRIES) {
+                    const waitSec = attempt * 5;
+                    logger.info(`[OpenAI][生图] ${waitSec}秒后进行重试...`);
+                    await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
+                }
+            }
+        }
+
+        // 所有重试都失败了
+        logger.error(`[OpenAI][生图] 最终失败:`, lastError?.message || lastError);
+        await e.reply(`生图失败: ${lastError?.message || "未知错误"}`);
         return true;
     }
 
@@ -386,7 +576,7 @@ export class OpenAI extends plugin {
         }
     }
 
-    async fetchOpenAI(query, collection = []) {
+    async fetchOpenAI(userId, query, collection = []) {
         const openAiData = await Promise.all(collection.map(async item => {
             const { downloadFileName, fileType } = item;
             const base64 = await toBase64(downloadFileName);
@@ -407,32 +597,232 @@ export class OpenAI extends plugin {
             }
         }));
 
-        const completion = await fetch(this.baseURL + "/v1/chat/completions", {
+        // 构建当前用户消息
+        const userMessage = {
+            role: "user",
+            content: collection.length > 0
+                ? [
+                    ...openAiData,
+                    {
+                        type: "text",
+                        text: query || defaultQuery,
+                    }
+                ]
+                : query || defaultQuery,
+        };
+
+        // 获取该用户的历史记录，构建 messages 数组
+        const history = this.chatHistory.get(userId) || [];
+        const messages = [
+            { role: "system", content: prompt },
+            ...history,
+            userMessage,
+        ];
+
+        // 智能拼接 URL：如果 baseURL 已经以 /v1 结尾则不再重复添加
+        const base = this.baseURL.replace(/\/+$/, "");
+        const endpoint = base.endsWith("/v1") ? "/chat/completions" : "/v1/chat/completions";
+        const completion = await fetch(`${base}${endpoint}`, {
             method: 'POST',
             headers: this.headers,
             body: JSON.stringify({
                 model: this.model,
-                messages: [
-                    {
-                        "role": "system",
-                        "content": prompt
-                    },
-                    {
-                        role: "user",
-                        content: [
-                            ...openAiData,
-                            {
-                                type: "text",
-                                text: query || defaultQuery,
-                            }
-                        ],
-                    },
-                ],
+                stream: false,
+                messages,
             }),
             timeout: 100000
         });
-        return (await completion.json()).choices[0].message.content;
+
+        const rawText = await completion.text();
+        if (!completion.ok) {
+            throw new Error(`[OpenAI] 请求失败(${completion.status}): ${rawText.slice(0, 1000)}`);
+        }
+        const reply = await parseCompletionText(rawText, completion.headers.get("content-type"));
+
+        // 保存对话历史：只保存纯文本内容，丢弃图片等多媒体数据
+        const plainUserMessage = collection.length > 0
+            ? { role: "user", content: query || defaultQuery }
+            : userMessage;
+        history.push(plainUserMessage);
+        history.push({ role: "assistant", content: reply });
+
+        // 超过最大轮数时裁剪（保留最近 N 轮，每轮2条消息）
+        const maxMessages = MAX_HISTORY_ROUNDS * 2;
+        if (history.length > maxMessages) {
+            history.splice(0, history.length - maxMessages);
+        }
+        this.chatHistory.set(userId, history);
+
+        return reply;
     }
+}
+
+/**
+ * 兼容解析各类 OpenAI 兼容供应商返回格式（JSON / SSE）
+ * @param {string} rawText
+ * @param {string | null} contentType
+ * @returns {string}
+ */
+function parseCompletionText(rawText, contentType = "") {
+    const normalizedType = (contentType || "").toLowerCase();
+
+    if (normalizedType.includes("application/json")) {
+        const json = JSON.parse(rawText);
+        const content = extractContentFromPayload(json);
+        if (content) return content;
+
+        // 某些供应商 content-type 报告为 JSON 但实际是 SSE
+        if (rawText.includes("data:")) {
+            const sseContent = parseSSEContent(rawText);
+            if (sseContent) return sseContent;
+        }
+
+        // 输出调试信息帮助排查
+        const finishReason = json?.choices?.[0]?.finish_reason;
+        const hasToolCalls = Array.isArray(json?.choices?.[0]?.message?.tool_calls);
+        const hasRefusal = !!json?.choices?.[0]?.message?.refusal;
+        const hasReasoning = !!json?.choices?.[0]?.message?.reasoning_content;
+        const contentValue = (JSON.stringify(json?.choices?.[0]?.message?.content) ?? "null").slice(0, 200);
+        const topKeys = Object.keys(json || {}).join(", ");
+        logger.warn(`[OpenAI] JSON 解析完成但未找到可用文本 | finish_reason=${finishReason} tool_calls=${hasToolCalls} refusal=${hasRefusal} reasoning=${hasReasoning} content=${contentValue} | 顶层keys: [${topKeys}]`);
+        logger.warn(`[OpenAI] 完整响应(前800字符): ${rawText.slice(0, 800)}`);
+
+        throw new Error(`[OpenAI] JSON 响应中未找到可用文本内容 (finish_reason=${finishReason}, keys=${topKeys})`);
+    }
+
+    // 某些兼容供应商即使 stream=false 仍返回 SSE（data: ...）
+    if (rawText.includes("data:")) {
+        const content = parseSSEContent(rawText);
+        if (content) return content;
+    }
+
+    // 兜底：尝试把非标准 content-type 的文本当 JSON 解析
+    try {
+        const json = JSON.parse(rawText);
+        const content = extractContentFromPayload(json);
+        if (content) return content;
+    } catch (error) {
+        // ignore
+    }
+
+    throw new Error(`[OpenAI] 无法解析响应内容: ${rawText.slice(0, 1000)}`);
+}
+
+/**
+ * 从 JSON payload 中提取模型输出文本
+ * @param {any} payload
+ * @returns {string}
+ */
+function extractContentFromPayload(payload) {
+    const messageContent = payload?.choices?.[0]?.message?.content;
+    const deltaContent = payload?.choices?.[0]?.delta?.content;
+
+    if (messageContent != null) return normalizeContent(messageContent);
+    if (deltaContent != null) return normalizeContent(deltaContent);
+
+    // 兼容 refusal（某些模型 content 为 null 时附带拒绝原因）
+    const refusal = payload?.choices?.[0]?.message?.refusal;
+    if (typeof refusal === "string" && refusal) return refusal;
+
+    // 兼容 reasoning_content（DeepSeek/Kimi 等推理模型返回的思考过程）
+    const reasoningContent = payload?.choices?.[0]?.message?.reasoning_content;
+    if (reasoningContent != null) return normalizeContent(reasoningContent);
+
+    // 兼容 tool_calls（模型返回工具调用而非文本内容时，尝试从函数参数中提取文本）
+    const toolCalls = payload?.choices?.[0]?.message?.tool_calls;
+    if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+        const parts = [];
+        for (const tc of toolCalls) {
+            try {
+                const args = typeof tc?.function?.arguments === "string"
+                    ? JSON.parse(tc.function.arguments)
+                    : tc?.function?.arguments;
+                if (typeof args === "string") {
+                    parts.push(args);
+                } else if (args && typeof args === "object") {
+                    const text = args.content || args.text || args.input || args.query || args.message;
+                    if (typeof text === "string") parts.push(text);
+                    else parts.push(JSON.stringify(args));
+                }
+            } catch {
+                if (typeof tc?.function?.arguments === "string") parts.push(tc.function.arguments);
+            }
+        }
+        if (parts.length) return parts.join("\n");
+    }
+
+    // 兼容极少数供应商返回的 output_text 结构
+    if (typeof payload?.output_text === "string") return payload.output_text;
+
+    // 兼容 OpenAI Responses API 格式: output[].content[].text
+    if (Array.isArray(payload?.output)) {
+        const parts = [];
+        for (const item of payload.output) {
+            if (typeof item?.text === "string") parts.push(item.text);
+            if (!Array.isArray(item?.content)) continue;
+            for (const c of item.content) {
+                if (typeof c?.text === "string") parts.push(c.text);
+            }
+        }
+        if (parts.length) return parts.join();
+    }
+
+    // 兼容 legacy completions API: choices[0].text
+    const legacyText = payload?.choices?.[0]?.text;
+    if (legacyText != null) return normalizeContent(legacyText);
+
+    return undefined;
+}
+
+/**
+ * 解析 text/event-stream，拼接 delta 内容，或提取最终 message 内容
+ * @param {string} rawText
+ * @returns {string}
+ */
+function parseSSEContent(rawText) {
+    const lines = rawText.split(/\r?\n/);
+    let finalText = "";
+    let deltaText = "";
+
+    for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+
+        try {
+            const chunk = JSON.parse(data);
+            const chunkText = extractContentFromPayload(chunk);
+
+            // 如果已经是完整消息，优先使用它
+            if (chunk?.choices?.[0]?.message?.content != null) {
+                finalText = chunkText;
+            } else if (chunk?.choices?.[0]?.delta?.content != null) {
+                deltaText += chunkText;
+            }
+        } catch (error) {
+            // 忽略无效 chunk，继续解析后续 data 行
+        }
+    }
+
+    return finalText || deltaText;
+}
+
+/**
+ * 规范化 content 字段（字符串或多段结构）
+ * @param {any} content
+ * @returns {string}
+ */
+function normalizeContent(content) {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+
+    return content
+        .map(item => {
+            if (typeof item === "string") return item;
+            if (typeof item?.text === "string") return item.text;
+            return "";
+        })
+        .join("");
 }
 
 /**
