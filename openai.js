@@ -2,6 +2,7 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import config from "../model/config.js";
+import { redisGetKey, redisSetKey } from "../utils/redis-util.js";
 
 const prompt = "模拟在群里呆了20年的热心大佬，擅长使用各种工具、搜索网页以及帮助群友解决问题。请用中文回答问题,回答尽量简洁明了，禁止使用markdown语法。";
 // 默认查询，建议写的通用一些，这样可以使用在不限于video、image、file等
@@ -25,6 +26,11 @@ const imageGenApiKey = "";
 const CLEAN_CRON = "6 8 * * *";
 // 每个用户最多保留的对话历史轮数（1轮 = 1条用户消息 + 1条助手回复）
 const MAX_HISTORY_ROUNDS = 10;
+
+// Redis 对话历史 key 前缀
+const HISTORY_KEY_PREFIX = "Yz:openai:history:";
+// 对话历史过期时间（秒），默认 24 小时，配合每日定时清理
+const HISTORY_TTL = 86400;
 
 export class OpenAI extends plugin {
     constructor() {
@@ -61,8 +67,6 @@ export class OpenAI extends plugin {
         this.model = openaiModel || this.toolsConfig.aiModel;
         // 临时存储消息id，请勿修改
         this.tmpMsgQueue = [];
-        // 对话历史记录 Map<userId, Array<{role, content}>>
-        this.chatHistory = new Map();
         // 生图配置（优先级：代码顶部 > 聊天配置回退）
         this.imageGenBaseURL = imageGenBaseURL || this.baseURL;
         this.imageGenApiKey = imageGenApiKey || this.headers["Authorization"]?.replace("Bearer ", "") || "";
@@ -74,11 +78,15 @@ export class OpenAI extends plugin {
      * @returns {Promise<void>}
      */
     async autoCleanTmp() {
-        // 清理对话历史记录
-        const historySize = this.chatHistory.size;
-        if (historySize > 0) {
-            this.chatHistory.clear();
-            logger.info(`[R插件补集][OpenAI] 已清理 ${historySize} 个用户的对话历史记录`);
+        // 清理 Redis 中的对话历史记录
+        try {
+            const historyKeys = await redis.keys(`${HISTORY_KEY_PREFIX}*`);
+            if (historyKeys.length > 0) {
+                await redis.del(...historyKeys);
+                logger.info(`[R插件补集][OpenAI] 已清理 Redis 中 ${historyKeys.length} 个用户的对话历史记录`);
+            }
+        } catch (err) {
+            logger.error(`[R插件补集][OpenAI] 清理 Redis 对话历史失败:`, err);
         }
 
         const fullPath = path.resolve("./data");
@@ -611,8 +619,15 @@ export class OpenAI extends plugin {
                 : query || defaultQuery,
         };
 
-        // 获取该用户的历史记录，构建 messages 数组
-        const history = this.chatHistory.get(userId) || [];
+        // 从 Redis 获取该用户的历史记录，构建 messages 数组
+        const historyKey = `${HISTORY_KEY_PREFIX}${userId}`;
+        let history;
+        try {
+            const raw = await redis.get(historyKey);
+            history = raw ? JSON.parse(raw) : [];
+        } catch {
+            history = [];
+        }
         const messages = [
             { role: "system", content: prompt },
             ...history,
@@ -651,10 +666,25 @@ export class OpenAI extends plugin {
         if (history.length > maxMessages) {
             history.splice(0, history.length - maxMessages);
         }
-        this.chatHistory.set(userId, history);
+        // 将对话历史保存到 Redis，设置过期时间
+        try {
+            await redis.set(historyKey, JSON.stringify(history), 'EX', HISTORY_TTL);
+        } catch (err) {
+            logger.warn(`[R插件补集][OpenAI] 保存对话历史失败: ${err.message}`);
+        }
 
         return reply;
     }
+}
+
+/**
+ * 去除模型返回的思考内容（<think>...</think>）
+ * @param {string} text
+ * @returns {string}
+ */
+function stripThinkingTags(text) {
+    if (typeof text !== "string") return text;
+    return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
 /**
@@ -700,7 +730,7 @@ function parseCompletionText(rawText, contentType = "") {
     try {
         const json = JSON.parse(rawText);
         const content = extractContentFromPayload(json);
-        if (content) return content;
+        if (content) return stripThinkingTags(content);
     } catch (error) {
         // ignore
     }
@@ -717,7 +747,7 @@ function extractContentFromPayload(payload) {
     const messageContent = payload?.choices?.[0]?.message?.content;
     const deltaContent = payload?.choices?.[0]?.delta?.content;
 
-    if (messageContent != null) return normalizeContent(messageContent);
+    if (messageContent != null) return stripThinkingTags(normalizeContent(messageContent));
     if (deltaContent != null) return normalizeContent(deltaContent);
 
     // 兼容 refusal（某些模型 content 为 null 时附带拒绝原因）
@@ -804,7 +834,7 @@ function parseSSEContent(rawText) {
         }
     }
 
-    return finalText || deltaText;
+    return stripThinkingTags(finalText || deltaText);
 }
 
 /**
