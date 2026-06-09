@@ -12,7 +12,7 @@ const openaiBaseURL = "";
 // API Key
 const openaiApiKey = "";
 // 模型
-const openaiModel = "";
+const openaiModel = "gpt-5.5";
 
 // === 生图配置（与聊天配置独立） ===
 // 生图模型
@@ -21,6 +21,14 @@ const imageGenModel = "gpt-image-2";
 const imageGenBaseURL = "";
 // 生图 API Key（留空则复用聊天配置）
 const imageGenApiKey = "";
+// 生图接口模式：openai = 保留原 /v1/images/*；codex-proxy = /v1/responses + image_generation 工具
+// 参考：https://github.com/icebear0828/codex-proxy
+const imageGenProvider = "openai";
+// codex-proxy 图像工具的宿主模型，不要填 gpt-image-2
+const imageHostModel = "gpt-5.5";
+// codex-proxy 图像工具参数
+const imageGenSize = "1024x1024";
+const imageGenOutputFormat = "png";
 
 // 每日 8 点 06 分自动清理临时文件和对话记录
 const CLEAN_CRON = "6 8 * * *";
@@ -71,6 +79,10 @@ export class OpenAI extends plugin {
         this.imageGenBaseURL = imageGenBaseURL || this.baseURL;
         this.imageGenApiKey = imageGenApiKey || this.headers["Authorization"]?.replace("Bearer ", "") || "";
         this.imageGenModel = imageGenModel || "gpt-image-2";
+        this.imageGenProvider = imageGenProvider || "openai";
+        this.imageHostModel = imageHostModel || this.model;
+        this.imageGenSize = imageGenSize || "1024x1024";
+        this.imageGenOutputFormat = imageGenOutputFormat || "png";
     }
 
     /**
@@ -439,6 +451,21 @@ export class OpenAI extends plugin {
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
+                if (this.imageGenProvider === "codex-proxy") {
+                    logger.info(`[OpenAI][生图] 第${attempt}次请求 | 模式: ${modeText} | Provider: codex-proxy | 宿主模型: ${this.imageHostModel} | prompt: ${promptText.slice(0, 100)}`);
+
+                    const imgBuffer = await this.requestCodexProxyImage(promptText, editImages);
+                    const imageExt = this.imageGenOutputFormat === "jpeg" ? "jpg" : this.imageGenOutputFormat;
+                    const tmpImgPath = path.resolve(`./data/tmp_img_${Date.now()}.${imageExt}`);
+
+                    await fs.promises.writeFile(tmpImgPath, imgBuffer);
+                    await e.reply(segment.image(tmpImgPath));
+                    fs.unlink(tmpImgPath, () => {});
+
+                    logger.info(`[OpenAI][生图] 完成 | 模式: ${modeText} | Provider: codex-proxy | 临时文件: ${tmpImgPath}`);
+                    return true;
+                }
+
                 const base = this.imageGenBaseURL.replace(/\/+$/, "");
                 let url, headers, body;
 
@@ -558,6 +585,67 @@ export class OpenAI extends plugin {
         logger.error(`[OpenAI][生图] 最终失败:`, lastError?.message || lastError);
         await e.reply(`生图失败: ${lastError?.message || "未知错误"}`);
         return true;
+    }
+
+    /**
+     * codex-proxy 图像生成/编辑：/v1/responses + image_generation 工具
+     * @param {string} promptText
+     * @param {Array} editImages
+     * @returns {Promise<Buffer>}
+     */
+    async requestCodexProxyImage(promptText, editImages = []) {
+        const base = this.imageGenBaseURL.replace(/\/+$/, "");
+        const endpoint = base.endsWith("/v1") ? "/responses" : "/v1/responses";
+        let content = promptText;
+
+        if (editImages.length > 0) {
+            content = [{ type: "input_text", text: promptText }];
+
+            for (let i = 0; i < editImages.length; i++) {
+                const img = editImages[i];
+                const tmpPath = path.resolve(`./data/tmp_edit_${Date.now()}_${i}.${img.fileExt || "png"}`);
+                await this.downloadFile(img.url, tmpPath);
+                const dataUrl = await toBase64(tmpPath);
+                fs.unlink(tmpPath, () => {});
+
+                content.push({
+                    type: "input_image",
+                    image_url: dataUrl,
+                    detail: "high"
+                });
+            }
+        }
+
+        const response = await fetch(`${base}${endpoint}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + this.imageGenApiKey
+            },
+            body: JSON.stringify({
+                model: this.imageHostModel,
+                stream: true,
+                input: [{
+                    role: "user",
+                    content
+                }],
+                tools: [{
+                    type: "image_generation",
+                    size: this.imageGenSize,
+                    output_format: this.imageGenOutputFormat,
+                    background: "auto",
+                    moderation: "auto"
+                }]
+            }),
+            timeout: 600000
+        });
+
+        const rawText = await response.text();
+        if (!response.ok) {
+            throw new Error(`codex-proxy 生图请求失败(${response.status}): ${rawText.slice(0, 500)}`);
+        }
+
+        return parseCodexProxyImage(rawText);
     }
 
     /**
@@ -835,6 +923,70 @@ function parseSSEContent(rawText) {
     }
 
     return stripThinkingTags(finalText || deltaText);
+}
+
+/**
+ * 从 codex-proxy /v1/responses 响应中提取 image_generation_call.result
+ * @param {string} rawText
+ * @returns {Buffer}
+ */
+function parseCodexProxyImage(rawText) {
+    const payloads = [];
+
+    if (rawText.includes("data:")) {
+        const lines = rawText.split(/\r?\n/);
+        for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === "[DONE]") continue;
+
+            try {
+                payloads.push(JSON.parse(data));
+            } catch (error) {
+                // 忽略非 JSON SSE 片段
+            }
+        }
+    } else {
+        try {
+            payloads.push(JSON.parse(rawText));
+        } catch {
+            throw new Error(`codex-proxy 生图响应解析失败: ${rawText.slice(0, 500)}`);
+        }
+    }
+
+    for (const payload of payloads) {
+        const result = findImageGenerationResult(payload);
+        if (result) {
+            return Buffer.from(result.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ""), "base64");
+        }
+    }
+
+    throw new Error("codex-proxy 响应中未找到 image_generation_call.result");
+}
+
+/**
+ * 递归查找 image_generation_call.result，兼容 SSE done 事件和非流式 responses payload
+ * @param {any} value
+ * @returns {string | null}
+ */
+function findImageGenerationResult(value) {
+    if (!value || typeof value !== "object") return null;
+
+    if (
+        value.type === "image_generation_call" &&
+        typeof value.result === "string" &&
+        value.result.length > 0
+    ) {
+        return value.result;
+    }
+
+    const children = Array.isArray(value) ? value : Object.values(value);
+    for (const child of children) {
+        const found = findImageGenerationResult(child);
+        if (found) return found;
+    }
+
+    return null;
 }
 
 /**
