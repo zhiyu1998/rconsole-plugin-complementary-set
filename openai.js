@@ -1,3 +1,32 @@
+/**
+ * 使用说明
+ *
+ * 1. 普通聊天
+ *    - 私聊：直接发送问题。
+ *    - 群聊：需要 @机器人 后发送问题。
+ *    - 回复图片/文件/视频后提问，会自动把引用内容一起发给模型识别。
+ *
+ * 2. 文生图
+ *    - 发送：#生图 一只穿宇航服的猫在月球散步
+ *    - 当 imageGenProvider = "codex-proxy" 时，会请求 /v1/responses，并通过 image_generation 工具生成图片。
+ *    - 当 imageGenProvider = "openai" 时，会保留原逻辑，请求 /v1/images/generations。
+ *
+ * 3. 图片编辑 / 带参考图生成
+ *    - 回复一张图片后发送：#改图 把背景改成雪山，人物保持不变
+ *    - 或发送：#图生图 改成赛博朋克风格
+ *    - 也支持：#编辑图片 给这张图加上日落氛围
+ *    - #改图 / #图生图 / #编辑图片 必须带参考图；如果没有参考图，会提示用户回复图片后再试。
+ *    - codex-proxy 模式会把参考图转成 input_image，随 prompt 一起发到 /v1/responses。
+ *    - openai 模式会保留原 multipart /v1/images/edits 逻辑。
+ *
+ * 4. codex-proxy 配置要点
+ *    - imageGenProvider 填 "codex-proxy"。
+ *    - imageGenBaseURL 指向 codex-proxy，例如：http://127.0.0.1:8080/v1。
+ *    - imageGenApiKey 使用 codex-proxy 控制面板里创建的 API Key。
+ *    - imageHostModel 填 Codex 聊天模型，例如 gpt-5.5；不要填 gpt-image-2。
+ *    - gpt-image-2 是 codex-proxy 后端图像工具模型，由 image_generation 工具自动使用。
+ */
+
 import axios from "axios";
 import fs from "fs";
 import path from "path";
@@ -21,6 +50,14 @@ const imageGenModel = "gpt-image-2";
 const imageGenBaseURL = "";
 // 生图 API Key（留空则复用聊天配置）
 const imageGenApiKey = "";
+// 生图接口模式：openai = 保留原 /v1/images/*；codex-proxy = /v1/responses + image_generation 工具
+// 参考：https://github.com/icebear0828/codex-proxy
+const imageGenProvider = "openai";
+// codex-proxy 图像工具的宿主模型，不要填 gpt-image-2
+const imageHostModel = "";
+// codex-proxy 图像工具参数
+const imageGenSize = "1024x1024";
+const imageGenOutputFormat = "png";
 
 // 每日 8 点 06 分自动清理临时文件和对话记录
 const CLEAN_CRON = "6 8 * * *";
@@ -40,6 +77,10 @@ export class OpenAI extends plugin {
             event: 'message',
             priority: 5001,
             rule: [
+                {
+                    reg: /^#(?:改图|编辑图片|图生图)[\s\S]+/,
+                    fnc: 'generateImage'
+                },
                 {
                     reg: /^#生图[\s\S]+/,
                     fnc: 'generateImage'
@@ -71,6 +112,10 @@ export class OpenAI extends plugin {
         this.imageGenBaseURL = imageGenBaseURL || this.baseURL;
         this.imageGenApiKey = imageGenApiKey || this.headers["Authorization"]?.replace("Bearer ", "") || "";
         this.imageGenModel = imageGenModel || "gpt-image-2";
+        this.imageGenProvider = imageGenProvider || "openai";
+        this.imageHostModel = imageHostModel || this.model;
+        this.imageGenSize = imageGenSize || "1024x1024";
+        this.imageGenOutputFormat = imageGenOutputFormat || "png";
     }
 
     /**
@@ -405,28 +450,26 @@ export class OpenAI extends plugin {
      * @returns {Promise<boolean>}
      */
     async generateImage(e) {
-        // 提取 #生图 后面的 prompt 文本
-        const promptText = e.msg.replace(/^#生图\s*/, "").trim();
+        const isImageEditCommand = /^#(?:改图|编辑图片|图生图)/.test(e.msg);
+        // 提取图片指令后面的 prompt 文本
+        const promptText = e.msg.replace(/^#(?:生图|改图|编辑图片|图生图)\s*/, "").trim();
         if (!promptText) {
-            await e.reply("请在 #生图 后输入图片描述，例如：#生图 一只穿宇航服的猫在月球散步");
+            await e.reply("请在指令后输入图片描述，例如：#生图 一只穿宇航服的猫在月球散步，或回复图片发送：#改图 改成赛博朋克风格");
             return false;
         }
 
-        // 检查是否引用了包含图片的消息（图生图 / 编辑模式）
+        // 检查是否带有参考图（回复图片、合并转发图片，或当前消息里的图片）
         let editImages = [];
-        if (e.reply_id !== undefined) {
-            try {
-                const replyItems = await this.autoGetUrl(e);
-                for (const item of replyItems) {
-                    if (item.fileType === "image" && item.url) {
-                        editImages.push(item);
-                    }
-                }
-                // 清理 autoGetUrl 产生的临时消息
-                await this.clearTmpMsg(e);
-            } catch (err) {
-                logger.warn(`[OpenAI][生图] 获取引用图片失败: ${err.message}`);
-            }
+        try {
+            editImages = await this.collectImageEditRefs(e);
+            await this.clearTmpMsg(e);
+        } catch (err) {
+            logger.warn(`[OpenAI][生图] 获取参考图片失败: ${err.message}`);
+        }
+
+        if (isImageEditCommand && editImages.length === 0) {
+            await e.reply("图片编辑需要参考图，请回复一张图片后发送：#改图 把背景改成雪山，人物保持不变");
+            return false;
         }
 
         const isEditMode = editImages.length > 0;
@@ -439,6 +482,21 @@ export class OpenAI extends plugin {
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
+                if (this.imageGenProvider === "codex-proxy") {
+                    logger.info(`[OpenAI][生图] 第${attempt}次请求 | 模式: ${modeText} | Provider: codex-proxy | 宿主模型: ${this.imageHostModel} | prompt: ${promptText.slice(0, 100)}`);
+
+                    const imgBuffer = await this.requestCodexProxyImage(promptText, editImages);
+                    const imageExt = this.imageGenOutputFormat === "jpeg" ? "jpg" : this.imageGenOutputFormat;
+                    const tmpImgPath = path.resolve(`./data/tmp_img_${Date.now()}.${imageExt}`);
+
+                    await fs.promises.writeFile(tmpImgPath, imgBuffer);
+                    await e.reply(segment.image(tmpImgPath));
+                    fs.unlink(tmpImgPath, () => {});
+
+                    logger.info(`[OpenAI][生图] 完成 | 模式: ${modeText} | Provider: codex-proxy | 临时文件: ${tmpImgPath}`);
+                    return true;
+                }
+
                 const base = this.imageGenBaseURL.replace(/\/+$/, "");
                 let url, headers, body;
 
@@ -558,6 +616,172 @@ export class OpenAI extends plugin {
         logger.error(`[OpenAI][生图] 最终失败:`, lastError?.message || lastError);
         await e.reply(`生图失败: ${lastError?.message || "未知错误"}`);
         return true;
+    }
+
+    /**
+     * 收集 codex-proxy 编辑模式参考图：支持回复图片、合并转发图片、当前消息图片
+     * @param e
+     * @returns {Promise<Array>}
+     */
+    async collectImageEditRefs(e) {
+        const refs = [];
+        const seen = new Set();
+        const addImage = item => {
+            if (!item || item.fileType !== "image" || !item.url) return;
+            if (seen.has(item.url)) return;
+            seen.add(item.url);
+            refs.push(item);
+        };
+
+        // 优先读取当前消息中的图片，适配「#改图 <描述> + 图片」同一条消息
+        const directImages = await this.extractImageRefsFromSegments(e.message);
+        directImages.forEach(addImage);
+
+        // 有回复时读取被回复消息；无回复且当前消息没取到图时，再回退到群历史最后一条
+        if (e.reply_id !== undefined || refs.length === 0) {
+            const autoItems = await this.autoGetUrl(e);
+            if (Array.isArray(autoItems)) {
+                autoItems.forEach(addImage);
+            }
+        }
+
+        return refs;
+    }
+
+    /**
+     * 从 OneBot 消息段中抽取图片引用
+     * @param {Array} messages
+     * @returns {Promise<Array>}
+     */
+    async extractImageRefsFromSegments(messages) {
+        const imageRefs = [];
+        if (!Array.isArray(messages)) return imageRefs;
+
+        const forwardMessages = await this.handleForwardMsg(messages);
+        if (Array.isArray(forwardMessages)) {
+            for (const item of forwardMessages) {
+                if (item.fileType === "image" && item.url) {
+                    imageRefs.push(item);
+                }
+            }
+        }
+
+        for (const msg of messages) {
+            if (msg?.type !== "image") continue;
+            const imageUrl = msg.data?.url || msg.data?.path || msg.data?.file;
+            if (!imageUrl) continue;
+
+            imageRefs.push({
+                url: imageUrl,
+                fileExt: this.getImageFileExt(msg.data),
+                fileType: "image"
+            });
+        }
+
+        return imageRefs;
+    }
+
+    /**
+     * 从图片消息字段推断扩展名
+     * @param {object} data
+     * @returns {string}
+     */
+    getImageFileExt(data = {}) {
+        const source = data.file || data.file_id || data.url || data.path || "";
+        return source.match(/\.(jpg|jpeg|png|gif|webp)(?=\.|$|\?)/i)?.[1]?.toLowerCase() || "png";
+    }
+
+    /**
+     * codex-proxy 图像生成/编辑：/v1/responses + image_generation 工具
+     * @param {string} promptText
+     * @param {Array} editImages
+     * @returns {Promise<Buffer>}
+     */
+    async requestCodexProxyImage(promptText, editImages = []) {
+        const base = this.imageGenBaseURL.replace(/\/+$/, "");
+        const endpoint = base.endsWith("/v1") ? "/responses" : "/v1/responses";
+        let content = promptText;
+
+        if (editImages.length > 0) {
+            content = [{ type: "input_text", text: promptText }];
+
+            for (let i = 0; i < editImages.length; i++) {
+                const img = editImages[i];
+                const dataUrl = await this.imageRefToDataUrl(img, i);
+
+                content.push({
+                    type: "input_image",
+                    image_url: dataUrl,
+                    detail: "high"
+                });
+            }
+        }
+
+        const response = await fetch(`${base}${endpoint}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + this.imageGenApiKey
+            },
+            body: JSON.stringify({
+                model: this.imageHostModel,
+                stream: true,
+                input: [{
+                    role: "user",
+                    content
+                }],
+                tools: [{
+                    type: "image_generation",
+                    size: this.imageGenSize,
+                    output_format: this.imageGenOutputFormat,
+                    background: "auto",
+                    moderation: "auto"
+                }]
+            }),
+            timeout: 600000
+        });
+
+        const rawText = await response.text();
+        if (!response.ok) {
+            throw new Error(`codex-proxy 生图请求失败(${response.status}): ${rawText.slice(0, 500)}`);
+        }
+
+        return parseCodexProxyImage(rawText);
+    }
+
+    /**
+     * 将参考图转换为 Responses API 可用的 data URL
+     * @param {{ url: string, fileExt?: string }} img
+     * @param {number} index
+     * @returns {Promise<string>}
+     */
+    async imageRefToDataUrl(img, index = 0) {
+        const source = img?.url || "";
+        if (!source) {
+            throw new Error("参考图地址为空");
+        }
+
+        if (source.startsWith("data:image/")) {
+            return source;
+        }
+
+        if (/^https?:\/\//i.test(source)) {
+            const tmpPath = path.resolve(`./data/tmp_edit_${Date.now()}_${index}.${img.fileExt || "png"}`);
+            await this.downloadFile(source, tmpPath);
+            const dataUrl = await toBase64(tmpPath);
+            fs.unlink(tmpPath, () => {});
+            return dataUrl;
+        }
+
+        const localPath = source.startsWith("file://")
+            ? decodeURIComponent(source.replace(/^file:\/\/\/?/, ""))
+            : source;
+
+        if (fs.existsSync(localPath)) {
+            return await toBase64(localPath);
+        }
+
+        throw new Error(`无法读取参考图: ${source}`);
     }
 
     /**
@@ -835,6 +1059,70 @@ function parseSSEContent(rawText) {
     }
 
     return stripThinkingTags(finalText || deltaText);
+}
+
+/**
+ * 从 codex-proxy /v1/responses 响应中提取 image_generation_call.result
+ * @param {string} rawText
+ * @returns {Buffer}
+ */
+function parseCodexProxyImage(rawText) {
+    const payloads = [];
+
+    if (rawText.includes("data:")) {
+        const lines = rawText.split(/\r?\n/);
+        for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === "[DONE]") continue;
+
+            try {
+                payloads.push(JSON.parse(data));
+            } catch (error) {
+                // 忽略非 JSON SSE 片段
+            }
+        }
+    } else {
+        try {
+            payloads.push(JSON.parse(rawText));
+        } catch {
+            throw new Error(`codex-proxy 生图响应解析失败: ${rawText.slice(0, 500)}`);
+        }
+    }
+
+    for (const payload of payloads) {
+        const result = findImageGenerationResult(payload);
+        if (result) {
+            return Buffer.from(result.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ""), "base64");
+        }
+    }
+
+    throw new Error("codex-proxy 响应中未找到 image_generation_call.result");
+}
+
+/**
+ * 递归查找 image_generation_call.result，兼容 SSE done 事件和非流式 responses payload
+ * @param {any} value
+ * @returns {string | null}
+ */
+function findImageGenerationResult(value) {
+    if (!value || typeof value !== "object") return null;
+
+    if (
+        value.type === "image_generation_call" &&
+        typeof value.result === "string" &&
+        value.result.length > 0
+    ) {
+        return value.result;
+    }
+
+    const children = Array.isArray(value) ? value : Object.values(value);
+    for (const child of children) {
+        const found = findImageGenerationResult(child);
+        if (found) return found;
+    }
+
+    return null;
 }
 
 /**
