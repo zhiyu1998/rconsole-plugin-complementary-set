@@ -5,26 +5,27 @@
  *    - 私聊：直接发送问题。
  *    - 群聊：需要 @机器人 后发送问题。
  *    - 回复图片/文件/视频后提问，会自动把引用内容一起发给模型识别。
+ *    - 聊天请求优先使用 /v1/responses，并启用 web_search 工具；失败时回退到 /v1/chat/completions。
  *
  * 2. 文生图
  *    - 发送：#生图 一只穿宇航服的猫在月球散步
- *    - 当 imageGenProvider = "codex-proxy" 时，会请求 /v1/responses，并通过 image_generation 工具生成图片。
- *    - 当 imageGenProvider = "openai" 时，会保留原逻辑，请求 /v1/images/generations。
+ *    - 默认请求 /v1/responses，并通过 image_generation 工具生成图片；OpenAI 和 codex-proxy 可共用这套路径。
+ *    - 当 imageGenProvider = "openai" 时，会使用兼容后备逻辑，请求 /v1/images/generations。
  *
  * 3. 图片编辑 / 带参考图生成
  *    - 回复一张图片后发送：#改图 把背景改成雪山，人物保持不变
  *    - 或发送：#图生图 改成赛博朋克风格
  *    - 也支持：#编辑图片 给这张图加上日落氛围
  *    - #改图 / #图生图 / #编辑图片 必须带参考图；如果没有参考图，会提示用户回复图片后再试。
- *    - codex-proxy 模式会把参考图转成 input_image，随 prompt 一起发到 /v1/responses。
- *    - openai 模式会保留原 multipart /v1/images/edits 逻辑。
+ *    - responses / codex-proxy 模式会把参考图转成 input_image，随 prompt 一起发到 /v1/responses。
+ *    - openai 模式会保留原 multipart /v1/images/edits 兼容后备逻辑。
  *
  * 4. codex-proxy 配置要点
- *    - imageGenProvider 填 "codex-proxy"。
+ *    - imageGenProvider 填 "responses" 或 "codex-proxy"。
  *    - imageGenBaseURL 指向 codex-proxy，例如：http://127.0.0.1:8080/v1。
  *    - imageGenApiKey 使用 codex-proxy 控制面板里创建的 API Key。
  *    - imageHostModel 填 Codex 聊天模型，例如 gpt-5.5；不要填 gpt-image-2。
- *    - gpt-image-2 是 codex-proxy 后端图像工具模型，由 image_generation 工具自动使用。
+ *    - gpt-image-2 是后端图像工具模型，由 image_generation 工具自动使用。
  */
 
 import axios from "axios";
@@ -44,19 +45,19 @@ const openaiApiKey = "";
 const openaiModel = "";
 
 // === 生图配置（与聊天配置独立） ===
-// 生图模型
+// 旧 /v1/images/* 兼容后备模型；Responses 主路径不直接使用它
 const imageGenModel = "gpt-image-2";
 // 生图 base URL（留空则复用聊天配置）
 const imageGenBaseURL = "";
 // 生图 API Key（留空则复用聊天配置）
 const imageGenApiKey = "";
-// 生图接口模式：openai = 保留原 /v1/images/*；codex-proxy = /v1/responses + image_generation 工具
+// 生图接口模式：responses/codex-proxy = /v1/responses + image_generation 工具；openai = 兼容后备 /v1/images/*
 // 参考：https://github.com/icebear0828/codex-proxy
-const imageGenProvider = "openai";
-// codex-proxy 图像工具的宿主模型，不要填 gpt-image-2
+const imageGenProvider = "responses";
+// Responses 图像工具的宿主模型，不要填 gpt-image-2
 const imageHostModel = "";
-// codex-proxy 图像工具参数
-const imageGenSize = "1024x1024";
+// Responses 图像工具参数
+const imageGenSize = "auto";
 const imageGenOutputFormat = "png";
 
 // 每日 8 点 06 分自动清理临时文件和对话记录
@@ -112,7 +113,7 @@ export class OpenAI extends plugin {
         this.imageGenBaseURL = imageGenBaseURL || this.baseURL;
         this.imageGenApiKey = imageGenApiKey || this.headers["Authorization"]?.replace("Bearer ", "") || "";
         this.imageGenModel = imageGenModel || "gpt-image-2";
-        this.imageGenProvider = imageGenProvider || "openai";
+        this.imageGenProvider = (imageGenProvider || "responses").toLowerCase();
         this.imageHostModel = imageHostModel || this.model;
         this.imageGenSize = imageGenSize || "1024x1024";
         this.imageGenOutputFormat = imageGenOutputFormat || "png";
@@ -444,7 +445,8 @@ export class OpenAI extends plugin {
 
     /**
      * 生图功能：#生图 <prompt>
-     * 支持文生图（/v1/images/generations）和图生图/编辑（/v1/images/edits）
+     * 默认使用 Responses API（/v1/responses + image_generation 工具）
+     * 可通过 imageGenProvider = "openai" 切回旧 /v1/images/* 兼容后备逻辑
      * 当用户引用了包含图片的消息时，自动使用图生图编辑模式
      * @param e
      * @returns {Promise<boolean>}
@@ -482,10 +484,10 @@ export class OpenAI extends plugin {
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                if (this.imageGenProvider === "codex-proxy") {
-                    logger.info(`[OpenAI][生图] 第${attempt}次请求 | 模式: ${modeText} | Provider: codex-proxy | 宿主模型: ${this.imageHostModel} | prompt: ${promptText.slice(0, 100)}`);
+                if (this.imageGenProvider !== "openai") {
+                    logger.info(`[OpenAI][生图] 第${attempt}次请求 | 模式: ${modeText} | Provider: ${this.imageGenProvider} | /v1/responses | 宿主模型: ${this.imageHostModel} | prompt: ${promptText.slice(0, 100)}`);
 
-                    const imgBuffer = await this.requestCodexProxyImage(promptText, editImages);
+                    const imgBuffer = await this.requestResponsesImage(promptText, editImages);
                     const imageExt = this.imageGenOutputFormat === "jpeg" ? "jpg" : this.imageGenOutputFormat;
                     const tmpImgPath = path.resolve(`./data/tmp_img_${Date.now()}.${imageExt}`);
 
@@ -493,7 +495,7 @@ export class OpenAI extends plugin {
                     await e.reply(segment.image(tmpImgPath));
                     fs.unlink(tmpImgPath, () => {});
 
-                    logger.info(`[OpenAI][生图] 完成 | 模式: ${modeText} | Provider: codex-proxy | 临时文件: ${tmpImgPath}`);
+                    logger.info(`[OpenAI][生图] 完成 | 模式: ${modeText} | Provider: ${this.imageGenProvider} | 临时文件: ${tmpImgPath}`);
                     return true;
                 }
 
@@ -619,7 +621,7 @@ export class OpenAI extends plugin {
     }
 
     /**
-     * 收集 codex-proxy 编辑模式参考图：支持回复图片、合并转发图片、当前消息图片
+     * 收集 Responses 编辑模式参考图：支持回复图片、合并转发图片、当前消息图片
      * @param e
      * @returns {Promise<Array>}
      */
@@ -692,12 +694,12 @@ export class OpenAI extends plugin {
     }
 
     /**
-     * codex-proxy 图像生成/编辑：/v1/responses + image_generation 工具
+     * Responses 图像生成/编辑：/v1/responses + image_generation 工具
      * @param {string} promptText
      * @param {Array} editImages
      * @returns {Promise<Buffer>}
      */
-    async requestCodexProxyImage(promptText, editImages = []) {
+    async requestResponsesImage(promptText, editImages = []) {
         const base = this.imageGenBaseURL.replace(/\/+$/, "");
         const endpoint = base.endsWith("/v1") ? "/responses" : "/v1/responses";
         let content = promptText;
@@ -743,10 +745,10 @@ export class OpenAI extends plugin {
 
         const rawText = await response.text();
         if (!response.ok) {
-            throw new Error(`codex-proxy 生图请求失败(${response.status}): ${rawText.slice(0, 500)}`);
+            throw new Error(`Responses 生图请求失败(${response.status}): ${rawText.slice(0, 500)}`);
         }
 
-        return parseCodexProxyImage(rawText);
+        return parseResponsesImage(rawText);
     }
 
     /**
@@ -814,17 +816,15 @@ export class OpenAI extends plugin {
             const base64 = await toBase64(downloadFileName);
             if (fileType === "image") {
                 return {
-                    type: "image_url",
-                    image_url: {
-                        url: base64,
-                    }
+                    type: "input_image",
+                    image_url: base64,
+                    detail: "high"
                 };
             } else {
                 return {
-                    type: "file",
-                    file_url: {
-                        url: base64,
-                    }
+                    type: "input_file",
+                    filename: path.basename(downloadFileName),
+                    file_data: base64
                 };
             }
         }));
@@ -836,14 +836,14 @@ export class OpenAI extends plugin {
                 ? [
                     ...openAiData,
                     {
-                        type: "text",
+                        type: "input_text",
                         text: query || defaultQuery,
                     }
                 ]
                 : query || defaultQuery,
         };
 
-        // 从 Redis 获取该用户的历史记录，构建 messages 数组
+        // 从 Redis 获取该用户的历史记录，构建 Responses input 数组
         const historyKey = `${HISTORY_KEY_PREFIX}${userId}`;
         let history;
         try {
@@ -852,31 +852,25 @@ export class OpenAI extends plugin {
         } catch {
             history = [];
         }
-        const messages = [
-            { role: "system", content: prompt },
-            ...history,
+        const input = [
+            ...history.map(toResponsesInputMessage).filter(Boolean),
             userMessage,
         ];
+        const messages = [
+            { role: "system", content: prompt },
+            ...history.map(toChatCompletionMessage).filter(Boolean),
+            toChatCompletionMessage(userMessage),
+        ].filter(Boolean);
 
         // 智能拼接 URL：如果 baseURL 已经以 /v1 结尾则不再重复添加
         const base = this.baseURL.replace(/\/+$/, "");
-        const endpoint = base.endsWith("/v1") ? "/chat/completions" : "/v1/chat/completions";
-        const completion = await fetch(`${base}${endpoint}`, {
-            method: 'POST',
-            headers: this.headers,
-            body: JSON.stringify({
-                model: this.model,
-                stream: false,
-                messages,
-            }),
-            timeout: 100000
-        });
-
-        const rawText = await completion.text();
-        if (!completion.ok) {
-            throw new Error(`[OpenAI] 请求失败(${completion.status}): ${rawText.slice(0, 1000)}`);
+        let reply;
+        try {
+            reply = await this.requestResponsesCompletion(base, input);
+        } catch (err) {
+            logger.warn(`[OpenAI] /v1/responses 请求失败，回退到 /v1/chat/completions: ${err.message || err}`);
+            reply = await this.requestChatCompletionsFallback(base, messages);
         }
-        const reply = await parseCompletionText(rawText, completion.headers.get("content-type"));
 
         // 保存对话历史：只保存纯文本内容，丢弃图片等多媒体数据
         const plainUserMessage = collection.length > 0
@@ -899,6 +893,176 @@ export class OpenAI extends plugin {
 
         return reply;
     }
+
+    async requestResponsesCompletion(base, input) {
+        const endpoint = base.endsWith("/v1") ? "/responses" : "/v1/responses";
+        const completion = await fetch(`${base}${endpoint}`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({
+                model: this.model,
+                stream: false,
+                instructions: prompt,
+                input,
+                tools: [{
+                    type: "web_search"
+                }],
+            }),
+            timeout: 100000
+        });
+
+        const rawText = await completion.text();
+        if (!completion.ok) {
+            throw new Error(`[OpenAI] /v1/responses 请求失败(${completion.status}): ${rawText.slice(0, 1000)}`);
+        }
+
+        return parseCompletionText(rawText, completion.headers.get("content-type"));
+    }
+
+    async requestChatCompletionsFallback(base, messages) {
+        const endpoint = base.endsWith("/v1") ? "/chat/completions" : "/v1/chat/completions";
+        const completion = await fetch(`${base}${endpoint}`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({
+                model: this.model,
+                stream: false,
+                messages,
+            }),
+            timeout: 100000
+        });
+
+        const rawText = await completion.text();
+        if (!completion.ok) {
+            throw new Error(`[OpenAI] /v1/chat/completions 后备请求失败(${completion.status}): ${rawText.slice(0, 1000)}`);
+        }
+
+        return parseCompletionText(rawText, completion.headers.get("content-type"));
+    }
+}
+
+/**
+ * 将旧版 Chat Completions 风格的历史消息转换为 Responses input item。
+ * @param {{ role?: string, content?: any }} message
+ * @returns {{ role: string, content: any } | null}
+ */
+function toResponsesInputMessage(message) {
+    if (!message || typeof message !== "object") return null;
+
+    const role = message.role === "assistant" ? "assistant" : "user";
+    const content = toResponsesContent(message.content);
+    if (content == null || (Array.isArray(content) && content.length === 0)) return null;
+
+    return { role, content };
+}
+
+/**
+ * 将当前 Responses 风格消息转换为 Chat Completions 后备请求消息。
+ * @param {{ role?: string, content?: any }} message
+ * @returns {{ role: string, content: any } | null}
+ */
+function toChatCompletionMessage(message) {
+    if (!message || typeof message !== "object") return null;
+
+    const allowedRoles = new Set(["system", "user", "assistant"]);
+    const role = allowedRoles.has(message.role) ? message.role : "user";
+    const content = toChatCompletionContent(message.content);
+    if (content == null || (Array.isArray(content) && content.length === 0)) return null;
+
+    return { role, content };
+}
+
+/**
+ * 兼容 Responses 内容块，并输出 Chat Completions 内容块。
+ * @param {any} content
+ * @returns {any}
+ */
+function toChatCompletionContent(content) {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+
+    return content
+        .map(item => {
+            if (typeof item === "string") {
+                return { type: "text", text: item };
+            }
+            if (item?.type === "text" || item?.type === "image_url" || item?.type === "file") {
+                return item;
+            }
+            if (item?.type === "input_text") {
+                return { type: "text", text: item.text || "" };
+            }
+            if (item?.type === "input_image") {
+                return {
+                    type: "image_url",
+                    image_url: {
+                        url: item.image_url || ""
+                    }
+                };
+            }
+            if (item?.type === "input_file") {
+                return {
+                    type: "file",
+                    file_url: {
+                        url: item.file_data || item.file_url || item.file_id || ""
+                    }
+                };
+            }
+            return null;
+        })
+        .filter(item => {
+            if (!item) return false;
+            if (item.type === "text") return !!item.text;
+            if (item.type === "image_url") return !!(item.image_url?.url || item.image_url);
+            if (item.type === "file") return !!(item.file_url?.url || item.file_url || item.file);
+            return true;
+        });
+}
+
+/**
+ * 兼容旧 content 块，并输出 Responses API 内容块。
+ * @param {any} content
+ * @returns {any}
+ */
+function toResponsesContent(content) {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+
+    return content
+        .map(item => {
+            if (typeof item === "string") {
+                return { type: "input_text", text: item };
+            }
+            if (item?.type === "input_text" || item?.type === "input_image" || item?.type === "input_file") {
+                return item;
+            }
+            if (item?.type === "text") {
+                return { type: "input_text", text: item.text || "" };
+            }
+            if (item?.type === "image_url") {
+                return {
+                    type: "input_image",
+                    image_url: item.image_url?.url || item.image_url || "",
+                    detail: item.detail || "high"
+                };
+            }
+            if (item?.type === "file") {
+                const file = item.file || item.file_url || {};
+                return {
+                    type: "input_file",
+                    filename: file.filename || "attachment",
+                    file_data: file.file_data || file.url || ""
+                };
+            }
+            return null;
+        })
+        .filter(item => {
+            if (!item) return false;
+            if (item.type === "input_text") return !!item.text;
+            if (item.type === "input_image") return !!item.image_url;
+            if (item.type === "input_file") return !!(item.file_id || item.file_url || item.file_data);
+            return true;
+        });
 }
 
 /**
@@ -968,6 +1132,11 @@ function parseCompletionText(rawText, contentType = "") {
  * @returns {string}
  */
 function extractContentFromPayload(payload) {
+    if (payload?.response) {
+        const responseContent = extractContentFromPayload(payload.response);
+        if (responseContent) return responseContent;
+    }
+
     const messageContent = payload?.choices?.[0]?.message?.content;
     const deltaContent = payload?.choices?.[0]?.delta?.content;
 
@@ -1007,6 +1176,9 @@ function extractContentFromPayload(payload) {
 
     // 兼容极少数供应商返回的 output_text 结构
     if (typeof payload?.output_text === "string") return payload.output_text;
+    if (typeof payload?.text === "string" && String(payload?.type || "").includes("output_text")) {
+        return payload.text;
+    }
 
     // 兼容 OpenAI Responses API 格式: output[].content[].text
     if (Array.isArray(payload?.output)) {
@@ -1016,9 +1188,10 @@ function extractContentFromPayload(payload) {
             if (!Array.isArray(item?.content)) continue;
             for (const c of item.content) {
                 if (typeof c?.text === "string") parts.push(c.text);
+                if (typeof c?.refusal === "string") parts.push(c.refusal);
             }
         }
-        if (parts.length) return parts.join();
+        if (parts.length) return parts.join("\n");
     }
 
     // 兼容 legacy completions API: choices[0].text
@@ -1045,10 +1218,21 @@ function parseSSEContent(rawText) {
 
         try {
             const chunk = JSON.parse(data);
+
+            if (chunk?.type === "response.output_text.delta" && typeof chunk.delta === "string") {
+                deltaText += chunk.delta;
+                continue;
+            }
+            if (chunk?.type === "response.output_text.done" && typeof chunk.text === "string") {
+                finalText = chunk.text;
+                continue;
+            }
+
             const chunkText = extractContentFromPayload(chunk);
+            if (!chunkText) continue;
 
             // 如果已经是完整消息，优先使用它
-            if (chunk?.choices?.[0]?.message?.content != null) {
+            if (chunk?.choices?.[0]?.message?.content != null || chunk?.type === "response.completed" || chunk?.response) {
                 finalText = chunkText;
             } else if (chunk?.choices?.[0]?.delta?.content != null) {
                 deltaText += chunkText;
@@ -1062,11 +1246,11 @@ function parseSSEContent(rawText) {
 }
 
 /**
- * 从 codex-proxy /v1/responses 响应中提取 image_generation_call.result
+ * 从 /v1/responses 响应中提取 image_generation_call.result
  * @param {string} rawText
  * @returns {Buffer}
  */
-function parseCodexProxyImage(rawText) {
+function parseResponsesImage(rawText) {
     const payloads = [];
 
     if (rawText.includes("data:")) {
@@ -1086,7 +1270,7 @@ function parseCodexProxyImage(rawText) {
         try {
             payloads.push(JSON.parse(rawText));
         } catch {
-            throw new Error(`codex-proxy 生图响应解析失败: ${rawText.slice(0, 500)}`);
+            throw new Error(`Responses 生图响应解析失败: ${rawText.slice(0, 500)}`);
         }
     }
 
@@ -1097,7 +1281,7 @@ function parseCodexProxyImage(rawText) {
         }
     }
 
-    throw new Error("codex-proxy 响应中未找到 image_generation_call.result");
+    throw new Error("Responses 响应中未找到 image_generation_call.result");
 }
 
 /**
