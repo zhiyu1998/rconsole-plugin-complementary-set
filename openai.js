@@ -53,7 +53,7 @@ const imageGenBaseURL = "";
 const imageGenApiKey = "";
 // 生图接口模式：responses/codex-proxy = /v1/responses + image_generation 工具；openai = 兼容后备 /v1/images/*
 // 参考：https://github.com/icebear0828/codex-proxy
-const imageGenProvider = "responses";
+const imageGenProvider = "openai";
 // Responses 图像工具的宿主模型，不要填 gpt-image-2
 const imageHostModel = "";
 // Responses 图像工具参数
@@ -69,6 +69,13 @@ const MAX_HISTORY_ROUNDS = 10;
 const HISTORY_KEY_PREFIX = "Yz:openai:history:";
 // 对话历史过期时间（秒），默认 24 小时，配合每日定时清理
 const HISTORY_TTL = 86400;
+
+// === 推理配置 ===
+// 推理强度：none / minimal / low / medium / high / xhigh
+// 默认 medium（平衡速度和推理深度），复杂任务可调高
+const reasoningEffort = "medium";
+// 是否在群聊中展示推理摘要（Responses API 返回的 summary）
+const showReasoningSummary = false;
 
 export class OpenAI extends plugin {
     constructor() {
@@ -865,8 +872,14 @@ export class OpenAI extends plugin {
         // 智能拼接 URL：如果 baseURL 已经以 /v1 结尾则不再重复添加
         const base = this.baseURL.replace(/\/+$/, "");
         let reply;
+        let reasoningSummary = "";
         try {
-            reply = await this.requestResponsesCompletion(base, input);
+            const result = await this.requestResponsesCompletion(base, input);
+            reply = result.text;
+            // 提取推理摘要（Responses API 返回的 reasoning summary）
+            if (result.rawText) {
+                reasoningSummary = extractReasoningSummary(result.rawText);
+            }
         } catch (err) {
             logger.warn(`[OpenAI] /v1/responses 请求失败，回退到 /v1/chat/completions: ${err.message || err}`);
             reply = await this.requestChatCompletionsFallback(base, messages);
@@ -891,23 +904,33 @@ export class OpenAI extends plugin {
             logger.warn(`[R插件补集][OpenAI] 保存对话历史失败: ${err.message}`);
         }
 
+        // 返回结果，包含可选的推理摘要
+        if (showReasoningSummary && reasoningSummary) {
+            return `💭 思考摘要：${reasoningSummary}\n\n${reply}`;
+        }
         return reply;
     }
 
     async requestResponsesCompletion(base, input) {
         const endpoint = base.endsWith("/v1") ? "/responses" : "/v1/responses";
+        const requestBody = {
+            model: this.model,
+            stream: false,
+            instructions: prompt,
+            input,
+            tools: [{
+                type: "web_search"
+            }],
+        };
+        // 启用推理能力（Responses API 使用 reasoning.effort）
+        if (reasoningEffort && reasoningEffort !== "none") {
+            requestBody.reasoning = { effort: reasoningEffort, summary: "auto" };
+        }
+
         const completion = await fetch(`${base}${endpoint}`, {
             method: 'POST',
             headers: this.headers,
-            body: JSON.stringify({
-                model: this.model,
-                stream: false,
-                instructions: prompt,
-                input,
-                tools: [{
-                    type: "web_search"
-                }],
-            }),
+            body: JSON.stringify(requestBody),
             timeout: 100000
         });
 
@@ -916,19 +939,25 @@ export class OpenAI extends plugin {
             throw new Error(`[OpenAI] /v1/responses 请求失败(${completion.status}): ${rawText.slice(0, 1000)}`);
         }
 
-        return parseCompletionText(rawText, completion.headers.get("content-type"));
+        return { text: parseCompletionText(rawText, completion.headers.get("content-type")), rawText };
     }
 
     async requestChatCompletionsFallback(base, messages) {
         const endpoint = base.endsWith("/v1") ? "/chat/completions" : "/v1/chat/completions";
+        const requestBody = {
+            model: this.model,
+            stream: false,
+            messages,
+        };
+        // 启用推理能力（Chat Completions API 使用顶层 reasoning_effort）
+        if (reasoningEffort && reasoningEffort !== "none") {
+            requestBody.reasoning_effort = reasoningEffort;
+        }
+
         const completion = await fetch(`${base}${endpoint}`, {
             method: 'POST',
             headers: this.headers,
-            body: JSON.stringify({
-                model: this.model,
-                stream: false,
-                messages,
-            }),
+            body: JSON.stringify(requestBody),
             timeout: 100000
         });
 
@@ -1066,13 +1095,55 @@ function toResponsesContent(content) {
 }
 
 /**
- * 去除模型返回的思考内容（<think>...</think>）
+ * 从 Responses API 原始响应中提取推理摘要（reasoning summary）
+ * Responses API 在开启 reasoning.summary:"auto" 时，会在 output 数组中
+ * 插入 type="reasoning" 的条目，其 content[].text 为摘要文本
+ * @param {string} rawText
+ * @returns {string}
+ */
+function extractReasoningSummary(rawText) {
+    try {
+        const json = JSON.parse(rawText);
+        if (Array.isArray(json?.output)) {
+            for (const item of json.output) {
+                if (item.type === "reasoning" && Array.isArray(item.content)) {
+                    const texts = item.content
+                        .filter(c => typeof c.text === "string")
+                        .map(c => c.text);
+                    if (texts.length > 0) return texts.join("\n");
+                }
+            }
+        }
+    } catch {
+        const lines = rawText.split(/\r?\n/);
+        for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === "[DONE]") continue;
+            try {
+                const chunk = JSON.parse(data);
+                if (chunk.type === "response.output_item.done" && chunk.item?.type === "reasoning") {
+                    const texts = (chunk.item.content || [])
+                        .filter(c => typeof c.text === "string")
+                        .map(c => c.text);
+                    if (texts.length > 0) return texts.join("\n");
+                }
+            } catch {
+                // skip
+            }
+        }
+    }
+    return "";
+}
+
+/**
+ * 去除模型返回的思考内容（...）
  * @param {string} text
  * @returns {string}
  */
 function stripThinkingTags(text) {
     if (typeof text !== "string") return text;
-    return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    return text.replace(/💭[\s\S]*?<\/think>/g, "").trim();
 }
 
 /**
