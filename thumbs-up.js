@@ -1,5 +1,4 @@
 import fs from 'fs';
-import axios from 'axios';
 import schedule from 'node-schedule'
 
 // 存储位置
@@ -8,14 +7,12 @@ const thumbsUpMeListPath = './data/thumbsUpMeList.json';
 const thumbsUpMeList = loadSet();
 // 每次点赞数量，点到点不动为止
 const THUMBSUPME_SUM = 10
-// napcat开启http的地址
-const NAPCAT_HTTP_URL = 'http://localhost:2537/send_like';
 
 export class thumbsUp extends plugin {
     constructor() {
         super({
             name: "[R插件补集]橘之点赞",
-            dsc: "通过http进行点赞",
+            dsc: "通过内置API进行点赞",
             event: "message",
             priority: 5000,
             rule: [
@@ -29,11 +26,10 @@ export class thumbsUp extends plugin {
                 }
             ]
         })
-
     }
 
     async like(e) {
-        const isThumbsUp = await sendLikeRequest(e.sender.user_id, THUMBSUPME_SUM);
+        const isThumbsUp = await sendLikeRequest(e, e.sender.user_id, THUMBSUPME_SUM);
         e.reply(isThumbsUp);
     }
 
@@ -46,7 +42,7 @@ export class thumbsUp extends plugin {
         thumbsUpMeList.add(user_id);
         // 保存一下
         saveSet(thumbsUpMeList);
-        e.reply(`添加 ${ e.sender.user_id } 到订阅成功，每天凌晨12点为你点赞~`);
+        e.reply(`添加 ${e.sender.user_id} 到订阅成功，每天凌晨12点为你点赞~`);
     }
 }
 
@@ -81,40 +77,76 @@ function loadSet() {
 
 // 点赞定时器
 schedule.scheduleJob('30 0 0 * * *', async () => {
+    // 获取第一个可用的 Bot 实例
+    const bot = Bot?.[0] || Bot;
+    if (!bot) {
+        logger.error('[自动点赞] 未找到 Bot 实例');
+        return;
+    }
+    
     for (const qq of thumbsUpMeList) {
-        await sendLikeRequest(qq, THUMBSUPME_SUM)
-        logger.mark(`[R插件][自动点赞] 已给 ${ qq } 点赞 ${ THUMBSUPME_SUM } 次`)
+        await sendLikeRequestInternal(bot, qq, THUMBSUPME_SUM)
+        logger.mark(`[R插件][自动点赞] 已给 ${qq} 点赞 ${THUMBSUPME_SUM} 次`)
         await sleep(5000) // 等5秒在下一个
     }
 })
 
-// 定义一个函数发送 send_like 请求
-async function sendLikeRequest(userId, times = 1) {
-
-    const data = {
-        user_id: userId, // 要点赞的目标 QQ 号
-        times: times // 点赞次数，默认为 1
-    };
-
-    // 使用 axios 发送 POST 请求到 OneBot HTTP API
-    return axios.post(NAPCAT_HTTP_URL, data)
-        .then(response => {
-            const res = response.data;
-            if (res.status === 'ok') {
-                // 点赞成功，继续点赞
-                sendLikeRequest(userId, times);
-                return "点赞成功"
-            } else if (res.status === 'failed' && res.message.includes('已达上限')) {
-                logger.warn(`点赞失败：${ res.message }`);
-                // 停止点赞，因为点赞数已达上限
-                return '已达到点赞上限，停止点赞。'
-            } else {
-                // 处理其他错误
-                logger.error(`点赞失败：${ res.message || '未知错误' }`);
-                return '点赞失败';
-            }
-        })
-        .catch(error => {
-            logger.error('点赞请求发送失败:', error);
+/**
+ * 内部调用 Bot API 点赞（供定时器使用）
+ */
+async function sendLikeRequestInternal(bot, userId, times = 1) {
+    try {
+        const res = await bot.sendApi('send_like', {
+            user_id: userId,
+            times: times
         });
+        
+        if (res?.status === 'ok' || res?.retcode === 0) {
+            // 继续点赞直到上限
+            await sleep(1000);
+            return await sendLikeRequestInternal(bot, userId, times);
+        } else if (res?.message?.includes('已达上限') || res?.msg?.includes('已达上限')) {
+            return '已达到点赞上限';
+        } else {
+            logger.warn(`点赞失败:`, res?.message || res?.msg || '未知错误');
+            return '点赞失败';
+        }
+    } catch (error) {
+        // 通常是达到上限了
+        if (error.message?.includes('已达上限') || error.message?.includes('limit')) {
+            return '已达到今日点赞上限';
+        }
+        logger.error('点赞请求失败:', error.message);
+        return '点赞失败';
+    }
+}
+
+/**
+ * 发送点赞请求（供消息触发使用）
+ */
+async function sendLikeRequest(e, userId, times = 1) {
+    try {
+        const res = await e.bot.sendApi('send_like', {
+            user_id: userId,
+            times: times
+        });
+        
+        if (res?.status === 'ok' || res?.retcode === 0) {
+            // 继续点赞直到上限
+            await sleep(1000);
+            return await sendLikeRequest(e, userId, times);
+        } else if (res?.message?.includes('已达上限') || res?.msg?.includes('已达上限')) {
+            return '已达到点赞上限，停止点赞。';
+        } else {
+            logger.warn(`点赞失败:`, res?.message || res?.msg || '未知错误');
+            return '点赞失败';
+        }
+    } catch (error) {
+        // 通常是达到上限了
+        if (error.message?.includes('已达上限') || error.message?.includes('limit') || error.message?.includes('100')) {
+            return '已达到今日点赞上限 👍';
+        }
+        logger.error('点赞请求失败:', error.message);
+        return '点赞失败: ' + error.message;
+    }
 }
